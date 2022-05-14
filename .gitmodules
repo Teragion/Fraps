@@ -1,0 +1,6 @@
+[submodule "imported/googletest"]
+	path = imported/googletest
+	url = https://github.com/google/googletest.git
+[submodule "imported/eigen"]
+	path = imported/eigen
+	url = https://gitlab.com/libeigen/eigen.git
