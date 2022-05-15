@@ -103,3 +103,10 @@ set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 include(CTest)
 add_subdirectory(imported/googletest)
 add_subdirectory(tests)
+
+add_executable(Fracture2DDemo
+  ${GLAD_SRCS}
+  ${FRAPS_SRCS}
+  ${FRAPS_HDRS}
+  demo/demo2D.cpp
+)
