@@ -54,8 +54,8 @@ int init_monitor(Monitor* m) {
     m->initialized = true;
 
     ::glMatrixMode(GL_PROJECTION);
-    ::glLoadIdentity();
-    ::glOrtho(0, m->width, m->height, 0, 0, 1);
+    // ::glLoadIdentity();
+    // ::glOrtho(0, m->width, m->height, 0, 0, 1);
 
 #ifdef FLOP_DEBUG_INFO
     std::cout << "OpenGL version: " << reinterpret_cast<const char *>(glGetString(GL_VERSION)) << std::endl;

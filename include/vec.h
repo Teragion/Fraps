@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <initializer_list>
 #include <iostream>
 
 #include "util.h"
@@ -42,6 +43,14 @@ struct alignas(16) Vec {
     template<class S>
     explicit Vec<N, T>(const Vec<N, S>& source) {
         for (unsigned int i = 0; i < N; ++i) v[i] = (T)source[i];
+    }
+
+    Vec<N, T>(std::initializer_list<T> init_list) {
+        assert(init_list.size() == N);
+        int i = 0;
+        for (auto& t : init_list) {
+            v[i++] = t;
+        }
     }
 
     Vec<N, T>(T v0, T v1) {

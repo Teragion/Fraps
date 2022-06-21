@@ -29,7 +29,7 @@ void Heatmap::createDefaultHeatMapGradient() {
 //-- values representing that position in the gradient.
 void Heatmap::getColorAtValue(const float value, Color& c) {
     if (color.size() == 0)
-    return;
+        return;
 
     for (unsigned int i = 0; i < color.size(); i++) {
         ColorPoint& currC = color[i];

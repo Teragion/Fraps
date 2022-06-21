@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 
 #include <string>
+#include <vector>
 
 #include "util/color.h"
 
@@ -19,7 +20,7 @@ public:
     void refresh();
 
     template<typename Vec> void drawLine(const Vec& v0, const Vec& v1, const float& width = 1, const Color& color = white);
-    template<typename Vec> void drawPoly();
+    template<typename Vec> void drawPoly(const std::vector<Vec>& points, const float& width = 1, const Color& color = white);
     template<typename Vec> void drawQuad(const Vec& v0, const Vec& v1, const Vec& v2, const Vec& v3, const Color& color = white);
     template<typename Vec> void drawRect(const Vec& v0, const Vec& v1, const Color& color = white);
     template<typename Vec> void drawTri(const Vec& v0, const Vec& v1, const Vec& v2, const Color& color = white);
@@ -47,8 +48,14 @@ void Monitor::drawLine(const Vec& v0, const Vec& v1, const float& width, const C
 
 
 template<typename Vec>
-void Monitor::drawPoly() {
-    // TODO: implement
+void Monitor::drawPoly(const std::vector<Vec>& points, const float& width, const Color& color) {
+    ::glLineWidth(width);
+    ::glBegin(GL_LINE_LOOP);
+    ::glColor3f(color.r, color.g, color.b);
+    for (auto const & point : points) {
+        ::glVertex2d(point(0), point(1));
+    }
+    ::glEnd();
 }
 
 template<typename Vec>

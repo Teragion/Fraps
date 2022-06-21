@@ -1,0 +1,21 @@
+
+list(TRANSFORM GLAD_SRCS PREPEND ../)
+
+find_package(PNG REQUIRED)
+
+add_executable(Fracture2DDemo
+    ${GLAD_SRCS}
+    ${FRAPS_SRCS}
+    ${FRAPS_HDRS}
+    demo2DFracture.cpp
+)
+
+target_link_libraries(Fracture2DDemo
+  OpenGL::GL
+  glfw
+  # ${MKL_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${PNG_LIBRARY}
+  # OpenMP::OpenMP_CXX
+  # Eigen3::Eigen
+)
