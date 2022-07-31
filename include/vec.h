@@ -229,15 +229,20 @@ typedef Vec<6, char> Vec6c;
 typedef Vec<6, unsigned char> Vec6uc;
 
 template<unsigned int N, class T>
-T mag2(const Vec<N, T>& a) {
+void clear_vec(const Vec<N, T>& a) {
+    for (unsigned int i = 1; i < N; ++i) a(i) = static_cast<T>(0);
+}
+
+template<unsigned int N, class T>
+T norm2(const Vec<N, T>& a) {
     T l = sqr(a.v[0]);
     for (unsigned int i = 1; i < N; ++i) l += sqr(a.v[i]);
     return l;
 }
 
 template<unsigned int N, class T>
-T mag(const Vec<N, T>& a) {
-    return sqrt(mag2(a));
+T norm(const Vec<N, T>& a) {
+    return sqrt(norm2(a));
 }
 
 template<unsigned int N, class T>
@@ -254,12 +259,12 @@ inline T dist(const Vec<N, T>& a, const Vec<N, T>& b) {
 
 template<unsigned int N, class T>
 inline void normalize(Vec<N, T>& a) {
-    a /= mag(a);
+    a /= norm(a);
 }
 
 template<unsigned int N, class T>
 inline Vec<N, T> normalized(const Vec<N, T>& a) {
-    return a / mag(a);
+    return a / norm(a);
 }
 
 template<unsigned int N, class T>

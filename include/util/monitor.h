@@ -4,6 +4,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,7 @@ public:
 
     template<typename Vec> void drawLine(const Vec& v0, const Vec& v1, const float& width = 1, const Color& color = white);
     template<typename Vec> void drawPoly(const std::vector<Vec>& points, const float& width = 1, const Color& color = white);
+    inline void drawCircle(float cx, float cy, float r, int num_segments, const Color& color = white);
     template<typename Vec> void drawQuad(const Vec& v0, const Vec& v1, const Vec& v2, const Vec& v3, const Color& color = white);
     template<typename Vec> void drawRect(const Vec& v0, const Vec& v1, const Color& color = white);
     template<typename Vec> void drawTri(const Vec& v0, const Vec& v1, const Vec& v2, const Color& color = white);
@@ -33,7 +35,7 @@ public:
     Color bgcolor = {0, 0, 0, 0};
     unsigned int width = 1024;
     unsigned int height = 1024;
-    std::string window_title = "FLOP Monitor";
+    std::string window_title = "FRAPS Monitor";
 };
 
 template<typename Vec>
@@ -56,6 +58,20 @@ void Monitor::drawPoly(const std::vector<Vec>& points, const float& width, const
         ::glVertex2d(point(0), point(1));
     }
     ::glEnd();
+}
+
+inline void Monitor::drawCircle(float cx, float cy, float r, int num_segments, const Color& color) {
+    ::glBegin(GL_POLYGON);
+    ::glColor3f(color.r, color.g, color.b);
+    for (int ii = 0; ii < num_segments; ii++) {
+        float theta = 2.0f * M_PI * static_cast<float>(ii) / static_cast<float>(num_segments); // get the current angle
+
+        float x = r * cosf(theta); // calculate the x component
+        float y = r * sinf(theta); // calculate the y component
+
+        glVertex2f(x + cx, y + cy); // output vertex
+    }
+    glEnd();
 }
 
 template<typename Vec>
