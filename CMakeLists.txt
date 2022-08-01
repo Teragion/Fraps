@@ -16,8 +16,8 @@ elseif(APPLE)
   # somehow apple does not search this directory
   # include_directories(/usr/local/include) 
   # add_link_options("-L/usr/local/lib")
-  add_link_options("-L/usr/local/opt/llvm/lib")
-  add_compile_options("-I/usr/local/opt/llvm/include")
+  add_link_options("-L/opt/homebrew/opt/llvm/lib")
+  add_compile_options("-I/opt/homebrew/opt/llvm/include")
 endif()
 add_compile_options(-Wall)
 add_compile_options(-xc++)
@@ -31,12 +31,14 @@ endif()
 
 ################################
 # release flags 
+message(CMAKE_CXX_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}")
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -ffast-math -msse3 -mfpmath=sse -mavx -fopenmp ")
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
   set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -ffast-math -msse3 -mfpmath=sse -mavx ")
 elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -ffast-math -msse3 -mfpmath=sse -mavx -fopenmp=libomp ")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -ffast-math -fopenmp=libomp ")
+  # set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -ffast-math -msse3 -mfpmath=sse -mavx -fopenmp=libomp ")
 elseif(MSVC)
   set(CMAKE_CXX_FLAGS_RELEASE "/MD /O2 /Ob2 /DNDEBUG /arch:AVX2 /fp:fast ")
 endif()
@@ -49,7 +51,7 @@ elseif("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
 endif()
 
 # OpenMP
-# find_package(OpenMP REQUIRED)
+find_package(OpenMP REQUIRED)
 
 set(CMAKE_PREFIX_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 

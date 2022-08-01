@@ -48,7 +48,7 @@ typename Circle<Scalar, Vector>::contact_type
 Circle<Scalar, Vector>::detect_collision(Circle<Scalar, Vector> other) {
     Circle<Scalar, Vector>::contact_type ret;
     ret.depth = norm(other.center - center) - other.r - r;
-    ret.dir = normalized(other.center - center);
+    ret.direction = normalized(other.center - center);
     ret.v_rel = other.v - v;
     return ret;
 }

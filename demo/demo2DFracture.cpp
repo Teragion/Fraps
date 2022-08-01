@@ -260,55 +260,55 @@ int main() {
         mon.drawLine(pos, pos + dir * mag);
         
         // write to png
-        glReadPixels(0, 0, 1024, 1024, GL_RGB, GL_UNSIGNED_BYTE, (GLvoid *) pixels);
-        for (int j = 0; j * 2 < 1024; ++j) {
-            int x = j * 1024 * 3;
-            int y = (1024 - 1 - j) * 1024 * 3;
-            for (int i = 1024 * 3; i > 0; --i) {
-                uint8_t tmp = pixels[x];
-                pixels[x] = pixels[y];
-                pixels[y] = tmp;
-                ++x;
-                ++y;
-            }
-        }
-        png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-        png_infop info = png_create_info_struct(png);
-        if (!info) {
-            png_destroy_write_struct(&png, &info);
-            return -1;
-        }
-        std::string s = "output/Frame" + std::to_string(frame_count) + ".png";
-        FILE *fp = fopen(s.c_str(), "wb");
-        if (!fp) {
-            png_destroy_write_struct(&png, &info);
-            return -1;
-        }
+        // glReadPixels(0, 0, 1024, 1024, GL_RGB, GL_UNSIGNED_BYTE, (GLvoid *) pixels);
+        // for (int j = 0; j * 2 < 1024; ++j) {
+        //     int x = j * 1024 * 3;
+        //     int y = (1024 - 1 - j) * 1024 * 3;
+        //     for (int i = 1024 * 3; i > 0; --i) {
+        //         uint8_t tmp = pixels[x];
+        //         pixels[x] = pixels[y];
+        //         pixels[y] = tmp;
+        //         ++x;
+        //         ++y;
+        //     }
+        // }
+        // png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+        // png_infop info = png_create_info_struct(png);
+        // if (!info) {
+        //     png_destroy_write_struct(&png, &info);
+        //     return -1;
+        // }
+        // std::string s = "output/Frame" + std::to_string(frame_count) + ".png";
+        // FILE *fp = fopen(s.c_str(), "wb");
+        // if (!fp) {
+        //     png_destroy_write_struct(&png, &info);
+        //     return -1;
+        // }
 
-        png_init_io(png, fp);
-        png_set_IHDR(png, info, 1024, 1024, 8 , PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
-            PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
-        png_colorp palette = (png_colorp)png_malloc(png, PNG_MAX_PALETTE_LENGTH * sizeof(png_color));
-        if (!palette) {
-            fclose(fp);
-            png_destroy_write_struct(&png, &info);
-            return -1;
-        }
-        png_set_PLTE(png, info, palette, PNG_MAX_PALETTE_LENGTH);
-        png_write_info(png, info);
-        png_set_packing(png);
+        // png_init_io(png, fp);
+        // png_set_IHDR(png, info, 1024, 1024, 8 , PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+        //     PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+        // png_colorp palette = (png_colorp)png_malloc(png, PNG_MAX_PALETTE_LENGTH * sizeof(png_color));
+        // if (!palette) {
+        //     fclose(fp);
+        //     png_destroy_write_struct(&png, &info);
+        //     return -1;
+        // }
+        // png_set_PLTE(png, info, palette, PNG_MAX_PALETTE_LENGTH);
+        // png_write_info(png, info);
+        // png_set_packing(png);
 
-        png_bytepp rows = (png_bytepp)png_malloc(png, 1024 * sizeof(png_bytep));
-        for (int i = 0; i < 1024; ++i)
-            rows[i] = (png_bytep)(pixels + (1024 - i - 1) * 1024 * 3);
+        // png_bytepp rows = (png_bytepp)png_malloc(png, 1024 * sizeof(png_bytep));
+        // for (int i = 0; i < 1024; ++i)
+        //     rows[i] = (png_bytep)(pixels + (1024 - i - 1) * 1024 * 3);
 
-        png_write_image(png, rows);
-        png_write_end(png, info);
-        png_free(png, palette);
-        png_destroy_write_struct(&png, &info);
+        // png_write_image(png, rows);
+        // png_write_end(png, info);
+        // png_free(png, palette);
+        // png_destroy_write_struct(&png, &info);
 
-        fclose(fp);
-        delete[] rows;
+        // fclose(fp);
+        // delete[] rows;
         
         mon.refresh();
     }

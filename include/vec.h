@@ -229,7 +229,7 @@ typedef Vec<6, char> Vec6c;
 typedef Vec<6, unsigned char> Vec6uc;
 
 template<unsigned int N, class T>
-void clear_vec(const Vec<N, T>& a) {
+void clear_vec(Vec<N, T>& a) {
     for (unsigned int i = 1; i < N; ++i) a(i) = static_cast<T>(0);
 }
 
