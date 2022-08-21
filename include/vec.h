@@ -228,6 +228,19 @@ typedef Vec<6, unsigned short> Vec6us;
 typedef Vec<6, char> Vec6c;
 typedef Vec<6, unsigned char> Vec6uc;
 
+// operators with move
+template<unsigned int N, class T>
+Vec<N, T>&& operator+(Vec<N, T>&& lhs, const Vec<N, T>& rhs) {
+    lhs += rhs;
+    return std::move(lhs);
+}
+
+template<unsigned int N, class T>
+Vec<N, T>&& operator-(Vec<N, T>&& lhs, const Vec<N, T>& rhs) {
+    lhs -= rhs;
+    return std::move(lhs);
+}
+
 template<unsigned int N, class T>
 void clear_vec(Vec<N, T>& a) {
     for (unsigned int i = 1; i < N; ++i) a(i) = static_cast<T>(0);
@@ -374,6 +387,11 @@ inline Vec<2, T> perp(const Vec<2, T>& a) {
 template<class T>
 inline T cross(const Vec<2, T>& a, const Vec<2, T>& b) {
     return a.v[0] * b.v[1] - a.v[1] * b.v[0];
+}
+
+template<class T>
+inline Vec<2, T> cross(const Vec<2, T>& a, const T& b) {
+    return Vec<2, T>(a.v[1] * b, -a.v[0] * b);
 }
 
 template<class T>

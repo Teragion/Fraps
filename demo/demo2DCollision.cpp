@@ -21,7 +21,7 @@ using Scalar = double;
 using Vector = Vec2d;
 
 Scalar eps = 0.7; // coefficient of restitution
-Vector g = {0.0, -50.0}; // gravity
+Vector g = {0.0, -10.0}; // gravity
 Scalar dt = 1E-3; // timestep
 Scalar draw_step = 0.017; // frame update interval
 
@@ -123,7 +123,7 @@ void update_derived(std::vector<Circle<Scalar, Vector> >& objs) {
 void apply_gravity(std::vector<Circle<Scalar, Vector> >& objs) {
     for (auto& o : objs) {
         if (o.fixed) { continue; }
-        o.F += g;
+        o.F += g * o.w;
     }
 }
 
@@ -225,8 +225,9 @@ void compute_forces(const Eigen::MatrixX<Scalar>& A, const Eigen::VectorX<Scalar
     int itr = 0;
 
     while(true) {
+        itr++;
 #ifndef NDEBUG
-        std::cout << "itr = " << itr++ << std::endl;
+        std::cout << "itr = " << itr << std::endl;
 #endif
         // find d to drive to zero
         int d = -1;
@@ -367,15 +368,15 @@ int main() {
     std::vector<Circle<Scalar, Vector> > objs;
 
     // last balls are fixed
-    objs.push_back(Circle<Scalar, Vector>({0, 8}, 1, 9, {0, 0}));
+    // objs.push_back(Circle<Scalar, Vector>({0, 8}, 1, 9, {0, 0}));
     objs.push_back(Circle<Scalar, Vector>({1, 5}, 2, 9, {0, 0}));
 
     objs.push_back(Circle<Scalar, Vector>({0, -3}, 2, 10000, {0, 0}));
-    objs[2].fixed = true;
+    objs[1].fixed = true;
     objs.push_back(Circle<Scalar, Vector>({4, 0}, 3, 10000, {0, 0}));
-    objs[3].fixed = true;
+    objs[2].fixed = true;
     objs.push_back(Circle<Scalar, Vector>({-4, 0}, 2, 10000, {0, 0}));
-    objs[4].fixed = true;
+    objs[3].fixed = true;
 
     Monitor mon(1024, 1024);
 

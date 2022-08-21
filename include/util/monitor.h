@@ -48,11 +48,10 @@ void Monitor::drawLine(const Vec& v0, const Vec& v1, const float& width, const C
     ::glEnd();
 }
 
-
 template<typename Vec>
 void Monitor::drawPoly(const std::vector<Vec>& points, const float& width, const Color& color) {
     ::glLineWidth(width);
-    ::glBegin(GL_LINE_LOOP);
+    ::glBegin(GL_POLYGON);
     ::glColor3f(color.r, color.g, color.b);
     for (auto const & point : points) {
         ::glVertex2d(point(0), point(1));

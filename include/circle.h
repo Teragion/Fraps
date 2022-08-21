@@ -37,7 +37,7 @@ struct Circle {
         m(m) {}
 
     // detect collision
-    contact_type detect_collision(Circle other);
+    contact_type detect_collision(Circle& other);
 
     // update derived variables
     void update();
@@ -45,7 +45,7 @@ struct Circle {
 
 template<typename Scalar, typename Vector>
 typename Circle<Scalar, Vector>::contact_type 
-Circle<Scalar, Vector>::detect_collision(Circle<Scalar, Vector> other) {
+Circle<Scalar, Vector>::detect_collision(Circle<Scalar, Vector>& other) {
     Circle<Scalar, Vector>::contact_type ret;
     ret.depth = norm(other.center - center) - other.r - r;
     ret.direction = normalized(other.center - center);
