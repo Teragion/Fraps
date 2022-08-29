@@ -47,10 +47,10 @@ struct RigidPoly {
     bool fixed;
 
     RigidPoly() 
-        : verts() {}
+        : verts(), fixed(false) {}
     
     RigidPoly(std::initializer_list<Vector> vertices, Scalar density)
-        : verts(vertices), center({0.0, 0.0}), rot(0.0), m(0.0), L(0.0), density(density) {
+        : verts(vertices), center({0.0, 0.0}), rot(0.0), m(0.0), L(0.0), density(density), fixed(false) {
             for (int i = 0; i < verts.size(); i++) {
                 world.push_back(verts[i]);
             }
@@ -67,6 +67,7 @@ struct RigidPoly {
     void init_inertia();
 
     void local_to_world();
+    Vector calculate_world_vel(Vector r);
 
     void set_fixed();
 };
@@ -180,13 +181,20 @@ void RigidPoly<Scalar, Vector>::local_to_world() {
     Scalar t2;
 
     for (int i = 0; i < verts.size(); i++) {
-        world[i] = verts[i] + center;
+        world[i] = verts[i];
         t1 = a11 * world[i](0) + a12 * world[i](1);
         t2 = a21 * world[i](0) + a22 * world[i](1);
 
         world[i](0) = t1;
         world[i](1) = t2;
+
+        world[i] += center;
     }
+}
+
+template<typename Scalar, typename Vector>
+Vector RigidPoly<Scalar, Vector>::calculate_world_vel(Vector r) {
+    return v - cross(r, omega);
 }
 
 template<typename Scalar, typename Vector>

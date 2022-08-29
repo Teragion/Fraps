@@ -19,6 +19,8 @@
 #include <iostream>
 #include <thread>
 
+#include <cassert>
+
 using contact_type = Contact<Scalar, Vector>;
 
 // TODO: replace this with Runge-Kutta
@@ -66,75 +68,143 @@ Scalar detect_contact(std::vector<RigidPoly<Scalar, Vector> >& objs,
                 std::cout << objs[i].omega << std::endl;
                 std::cout << objs[j].v << std::endl;
                 std::cout << objs[j].omega << std::endl;
+                std::cout << contact.depth << std::endl;
                 std::cout << contact.r_i << std::endl;
                 std::cout << contact.v_rel << std::endl;
                 std::cout << contact.v_rel_s << std::endl;
 #endif
-                if (v_rel_s > tol_rel_v) { // moving away
-                    continue;
-                } else if (v_rel_s > -tol_rel_v) { // resting contact
-                    contact.i = i;
-                    contact.j = j;
-                    if (contact.f2f) {
-                        contact_type c1 = contact;
-                        c1.p = c1.p + c1.f2f_offset;
-                        c1.v_rel = objs[j].v - objs[i].v;
-                        c1.r_i = c1.p - objs[i].center;
-                        c1.v_rel -= Vector{objs[i].omega * -c1.r_i(1), objs[i].omega * c1.r_i(0)};
-                        c1.r_j = c1.p - objs[j].center;
-                        c1.v_rel += Vector{objs[j].omega * -c1.r_j(1), objs[j].omega * c1.r_j(0)};
-
-                        contact_type c2 = contact;
-                        c2.p = c2.p - c2.f2f_offset;
-                        c2.v_rel = objs[j].v - objs[i].v;
-                        c2.r_i = c2.p - objs[i].center;
-                        c2.v_rel -= Vector{objs[i].omega * -c2.r_i(1), objs[i].omega * c2.r_i(0)};
-                        c2.r_j = c2.p - objs[j].center;
-                        c2.v_rel += Vector{objs[j].omega * -c2.r_j(1), objs[j].omega * c2.r_j(0)};
-
-                        resting.push_back(c1);
-                        resting.push_back(c2);
-                    } else {
-                        resting.push_back(contact);
-                    }
-                } else { // collision
-                    contact.i = i;
-                    contact.j = j;
+                contact.i = i;
+                contact.j = j;
+//                if (contact.f2f) {
+//                    contact_type c1 = contact;
+//                    c1.p = c1.p + c1.f2f_offset;
+//                    c1.v_rel = objs[j].v - objs[i].v;
+//                    c1.r_i = c1.p - objs[i].center;
+//                    c1.v_rel -= Vector{objs[i].omega * -c1.r_i(1), objs[i].omega * c1.r_i(0)};
+//                    c1.r_j = c1.p - objs[j].center;
+//                    c1.v_rel += Vector{objs[j].omega * -c1.r_j(1), objs[j].omega * c1.r_j(0)};
+//
+//                    contact_type c2 = contact;
+//                    c2.p = c2.p - c2.f2f_offset;
+//                    c2.v_rel = objs[j].v - objs[i].v;
+//                    c2.r_i = c2.p - objs[i].center;
+//                    c2.v_rel -= Vector{objs[i].omega * -c2.r_i(1), objs[i].omega * c2.r_i(0)};
+//                    c2.r_j = c2.p - objs[j].center;
+//                    c2.v_rel += Vector{objs[j].omega * -c2.r_j(1), objs[j].omega * c2.r_j(0)};
+//
+//                    impulse.push_back(c1);
+//                    impulse.push_back(c2);
+//                } else {
                     impulse.push_back(contact);
-                }
+//                }
             }
         }
     }
     return 0;
 }
 
+void calculate_v_rel(std::vector<RigidPoly<Scalar, Vector> >& objs,
+                       contact_type& contact) {
+    contact.v_rel = objs[contact.j].calculate_world_vel(contact.r_j)
+                    - objs[contact.i].calculate_world_vel(contact.r_i);
+    contact.v_rel_s = dot(contact.v_rel, contact.direction);
+}
+
 void process_impulse(std::vector<RigidPoly<Scalar, Vector> >& objs, 
                      std::vector<contact_type>& impulse) {
 #ifndef NDEBUG
-    std::cout << "impulse = " << impulse.size() << std::endl;
+    int itr = 0;
+    int processed = 0;
 #endif
-    for (auto& contact : impulse) {
-        // compute impulse exchange
-        Scalar numerator = -(1 + eps) * contact.v_rel_s;
-        // Scalar ti = contact.r_i(0) * contact.direction(1) - contact.r_i(1) * contact.direction(0);
-        // Scalar tj = contact.r_j(0) * contact.direction(1) - contact.r_j(1) * contact.direction(0);
-        // Scalar denominator = 1 * objs[contact.i].w_inv + 1 * objs[contact.j].w_inv
-        //                      + dot(1 * objs[contact.i].I_inv * Vector{ti * -contact.r_i(0), ti * contact.r_i(1)}
-        //                          + 1 * objs[contact.j].I_inv * Vector{tj * -contact.r_j(0), tj * contact.r_j(1)},
-        //                            contact.direction);
-        Scalar denominator = objs[contact.i].w_inv + objs[contact.j].w_inv
-                             + sqr(cross(contact.r_i, contact.direction)) * objs[contact.i].I_inv
-                             + sqr(cross(contact.r_j, contact.direction)) * objs[contact.j].I_inv;
-        Scalar j = numerator / denominator;
-        // J = j * direction
-        objs[contact.i].m -= j * contact.direction;
-        objs[contact.i].L -= cross(contact.r_i, j * contact.direction);
-        if (!objs[contact.j].fixed) {
-            objs[contact.j].m += j * contact.direction;
-            objs[contact.j].L += cross(contact.r_j, j * contact.direction);
+    while (true) {
+        itr++;
+#ifndef NDEBUG
+        std::cout << "process_impulse, itr = " << itr << std::endl;
+        std::cout << "\t\tprocessed = " << processed << std::endl;
+#endif
+        bool change = false;
+        for (auto& contact : impulse) {
+            if (contact.processed) {
+                continue;
+            }
+            calculate_v_rel(objs, contact);
+            if (contact.v_rel_s > -tol_rel_v) {
+                continue;
+            }
+            change = true;
+#ifndef NDEBUG
+            processed++;
+#endif
+            // compute impulse exchange
+            Scalar numerator = -(1 + eps) * contact.v_rel_s;
+            // Scalar ti = contact.r_i(0) * contact.direction(1) - contact.r_i(1) * contact.direction(0);
+            // Scalar tj = contact.r_j(0) * contact.direction(1) - contact.r_j(1) * contact.direction(0);
+            // Scalar denominator = 1 * objs[contact.i].w_inv + 1 * objs[contact.j].w_inv
+            //                      + dot(1 * objs[contact.i].I_inv * Vector{ti * -contact.r_i(0), ti * contact.r_i(1)}
+            //                          + 1 * objs[contact.j].I_inv * Vector{tj * -contact.r_j(0), tj * contact.r_j(1)},
+            //                            contact.direction);
+            Scalar denominator =
+                objs[contact.i].w_inv + objs[contact.j].w_inv + sqr(cross(contact.r_i, contact.direction)) * objs[contact.i].I_inv + sqr(cross(contact.r_j, contact.direction)) * objs[contact.j].I_inv;
+            Scalar j = numerator / denominator;
+            Vector J = j * contact.direction;
+            objs[contact.i].m -= J;
+            objs[contact.i].L -= cross(contact.r_i, J);
+            if (!objs[contact.j].fixed) {
+                objs[contact.j].m += J;
+                objs[contact.j].L += cross(contact.r_j, J);
+            }
+            contact.processed = true;
+        }
+        if (!change) {
+            break;
         }
     }
 }
+
+void find_resting(std::vector<RigidPoly<Scalar, Vector> >& objs,
+                  std::vector<contact_type>& impulse,
+                  std::vector<contact_type>& resting) {
+    for (auto& contact : impulse) {
+        contact.v_rel = objs[contact.j].calculate_world_vel(contact.r_j)
+                        - objs[contact.i].calculate_world_vel(contact.r_i);
+        contact.v_rel_s = dot(contact.v_rel, contact.direction);
+        int i = contact.i;
+        int j = contact.j;
+        if (contact.v_rel_s < tol_rel_v) {
+            if (contact.v_rel_s > tol_rel_v) { // moving away
+                continue;
+            } else if (contact.v_rel_s > -tol_rel_v) {  // resting contact
+                contact.i = i;
+                contact.j = j;
+                if (contact.f2f) {
+                    contact_type c1 = contact;
+                    c1.p = c1.p + c1.f2f_offset;
+                    c1.v_rel = objs[j].v - objs[i].v;
+                    c1.r_i = c1.p - objs[i].center;
+                    c1.v_rel -= Vector{objs[i].omega * -c1.r_i(1), objs[i].omega * c1.r_i(0)};
+                    c1.r_j = c1.p - objs[j].center;
+                    c1.v_rel += Vector{objs[j].omega * -c1.r_j(1), objs[j].omega * c1.r_j(0)};
+
+                    contact_type c2 = contact;
+                    c2.p = c2.p - c2.f2f_offset;
+                    c2.v_rel = objs[j].v - objs[i].v;
+                    c2.r_i = c2.p - objs[i].center;
+                    c2.v_rel -= Vector{objs[i].omega * -c2.r_i(1), objs[i].omega * c2.r_i(0)};
+                    c2.r_j = c2.p - objs[j].center;
+                    c2.v_rel += Vector{objs[j].omega * -c2.r_j(1), objs[j].omega * c2.r_j(0)};
+
+                    resting.push_back(c1);
+                    resting.push_back(c2);
+                } else {
+                    resting.push_back(contact);
+                }
+            } else {
+//                assert(false);
+            }
+        }
+    }
+}
+
 
 void clear_variables(std::vector<RigidPoly<Scalar, Vector> >& objs) {
     for (auto& o : objs) {
@@ -165,15 +235,16 @@ Eigen::VectorX<Scalar> fdirection(const Eigen::MatrixX<Scalar>& A, const Eigen::
     delta_f(d) = 1;
 
     // construct matrix Acc
+    int row;
     int c = C.sum();
     Eigen::MatrixX<Scalar> Acc(c, c);
+    row = 0;
     for (int i = 0; i < n; i++) {
-        int row = 0;
         if (C(i) == 0) {
             continue;
         }
+        int col = 0;
         for (int j = 0; j < n; j++) {
-            int col = 0;
             if (C(j) == 0) {
                 continue;
             }
@@ -185,12 +256,12 @@ Eigen::VectorX<Scalar> fdirection(const Eigen::MatrixX<Scalar>& A, const Eigen::
 
     // construct Acd
     Eigen::VectorX<Scalar> Acd(c);
+    row = 0;
     for (int i = 0; i < n; i++) {
-        int row = 0;
         if (C(i) == 0) {
             continue;
         }
-        Acd(row) = -A(row, d);
+        Acd(row) = -A(i, d);
         row++;
     }
 
@@ -198,9 +269,11 @@ Eigen::VectorX<Scalar> fdirection(const Eigen::MatrixX<Scalar>& A, const Eigen::
     Eigen::VectorX<Scalar> x = Acc.lu().solve(Acd);
 
     // transfer x to delta_f
+    row = 0;
     for (int i = 0; i < n; i++) {
         if (C(i) == 1) {
-            delta_f(i) = x(i);
+            delta_f(i) = x(row);
+            row++;
         }
     }
 
@@ -401,7 +474,7 @@ void solve_contact_forces(std::vector<RigidPoly<Scalar, Vector> >& objs, std::ve
         b(i) += -dot(resting[i].direction, (a1 + cross(cross(resting[i].r_i, objs[body1].omega), objs[body1].omega))
                                          - (a2 + cross(cross(resting[i].r_j, objs[body2].omega), objs[body2].omega)));
 
-        b(i) += resting[i].v_rel_s / dt + resting[i].depth / dt; // penentration correction
+        b(i) += resting[i].v_rel_s + resting[i].depth;  // penentration correction
     }
 
 #ifndef NDEBUG
@@ -418,9 +491,6 @@ void solve_contact_forces(std::vector<RigidPoly<Scalar, Vector> >& objs, std::ve
     // apply resting contact forces
     for (int i = 0; i < n_contacts; i++) {
         int body1 = resting[i].i;
-        if (body1 == 1) {
-            body1 = 1;
-        }
         int body2 = resting[i].j;
 
         // objs[body1].F -= f(i) * resting[i].direction;
@@ -440,7 +510,7 @@ int main() {
     std::vector<RigidPoly<Scalar, Vector> > objs;
 
     objs.push_back(RigidPoly<Scalar, Vector>({{1.0, 5.5}, {1.0, 7.0}, {-1.0, 7.0}, {-1.0, 5.5}}, 1.0));
-    objs[0].set_fixed();
+//    objs[0].set_fixed();
 
     objs.push_back(RigidPoly<Scalar, Vector>({{1.5, 2.5}, {1.5, 4.0}, {-0.5, 3.0}}, 1.0));
     // objs[1].set_fixed();
@@ -493,10 +563,16 @@ int main() {
         process_impulse(objs, impulse);
 
 #ifndef NDEBUG
-        std::cout << "solve_contact_forces()"<< std::endl;
+        std::cout << "find_resting()"<< std::endl;
 #endif
         update_derived(objs);
+        find_resting(objs, impulse, resting);
+
+#ifndef NDEBUG
+        std::cout << "solve_contact_forces()"<< std::endl;
+#endif
         solve_contact_forces(objs, resting);
+        update_derived(objs);
 
         // fine tune the step size
         Scalar cur_step = dt / 2.0;
@@ -506,7 +582,7 @@ int main() {
         int attempt = 0;
         while (true) {
             attempt++;
-            if (attempt > 10) {
+            if (attempt > 20) {
                 return -1;
             }
             Scalar ret = detect_contact(objs, impulse, resting, suggest);

@@ -20,6 +20,8 @@ struct Contact {
     // indices of objects, temporary
     int i;
     int j;
+
+    bool processed = false;
 };
 
 #endif

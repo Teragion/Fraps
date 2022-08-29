@@ -50,7 +50,7 @@ template<typename Scalar, typename Vector>
 bool detect_collision_sat(const std::vector<Vector>& poly1, const std::vector<Vector>& poly2,
                           Vector& position, Scalar& depth, Vector& normal, bool& at_p1,
                           bool& f2f, Vector& offset) {
-    const double tol_alignment = 1E-7;
+    const double tol_alignment = depth_tolerance;
 
     Scalar smallest = std::numeric_limits<Scalar>::max();
 
