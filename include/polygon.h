@@ -15,4 +15,4 @@ struct Polygon {
         : verts(init_list) {}
 };
 
-#endif
+#endif // POLYGON_H

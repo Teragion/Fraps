@@ -62,4 +62,4 @@ void write_matlab_array(std::ostream &output, Array2<T, Array1<T> >&a, const cha
 }
 
 
-#endif
+#endif // ARRAY2_UTILS_H

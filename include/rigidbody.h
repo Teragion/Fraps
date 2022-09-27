@@ -33,4 +33,4 @@ struct RigidBody {
     bool fixed;
 };
 
-#endif
+#endif // RIGIDBODY_H

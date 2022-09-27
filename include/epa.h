@@ -248,4 +248,4 @@ bool find_closest_gjk(const std::vector<Vector>& vtxsA, const std::vector<Vector
     }
 }
 
-#endif
+#endif // EPA_H

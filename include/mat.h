@@ -65,4 +65,4 @@ struct Mat {
     static constexpr unsigned int size() { return vector_type::size(); }
 };
 
-#endif
+#endif // MAT_H

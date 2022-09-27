@@ -292,4 +292,4 @@ typedef Array2<unsigned short, WrapArray1<unsigned short> >         WrapArray2us
 typedef Array2<char, WrapArray1<char> >                             WrapArray2c;
 typedef Array2<unsigned char, WrapArray1<unsigned char> >           WrapArray2uc;
 
-#endif
+#endif // ARRAY2_h

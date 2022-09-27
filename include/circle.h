@@ -59,4 +59,4 @@ void Circle<Scalar, Vector>::update() {
     v = m / w;
 }
 
-#endif
+#endif // CIRCLE_H

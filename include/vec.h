@@ -504,4 +504,35 @@ inline void update_minmax(const Vec<N, T>& x, Vec<N, T>& xmin, Vec<N, T>& xmax) 
     for (unsigned int i = 0; i < N; ++i) update_minmax(x[i], xmin[i], xmax[i]);
 }
 
-#endif
+// geometry related functions
+template<unsigned int N, class T>
+T area(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
+    return (((b(0) - a(0))*(c(1) - a(1)))-((c(0) - a(0))*(b(1) - a(1))));
+}
+
+template<unsigned int N, class T>
+bool left(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
+    return area(a, b, c) > 0;
+}
+
+template<unsigned int N, class T>
+bool leftOn(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
+    return area(a, b, c) >= 0;
+}
+
+template<unsigned int N, class T>
+bool right(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
+    return area(a, b, c) < 0;
+}
+
+template<unsigned int N, class T>
+bool rightOn(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
+    return area(a, b, c) <= 0;
+}
+
+template<unsigned int N, class T>
+bool collinear(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
+    return area(a, b, c) == 0;
+}
+
+#endif // VEC_H

@@ -89,4 +89,4 @@ void saxpy(const Array2<T, Array1<T> > &a, const Array2<T, Array1<T> > &b, Array
    }
 }
 
-#endif
+#endif // MATH_KERNEL_H

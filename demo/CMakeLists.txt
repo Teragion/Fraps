@@ -53,3 +53,21 @@ target_link_libraries(PolyCollision2DDemo
   # OpenMP::OpenMP_CXX
   # Eigen3::Eigen
 )
+
+add_executable(RigidFracture2DDemo
+    ${GLAD_SRCS}
+    ${FRAPS_SRCS}
+    ${FRAPS_HDRS}
+    demo2DRigidFracture.cpp
+)
+
+target_link_libraries(RigidFracture2DDemo
+    OpenGL::GL
+    glfw
+    # ${MKL_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${PNG_LIBRARY}
+    # OpenMP::OpenMP_CXX
+    # Eigen3::Eigen
+)
+

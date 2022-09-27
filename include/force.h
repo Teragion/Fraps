@@ -5,14 +5,12 @@ template<typename Scalar, typename Vector>
 struct Force {
     Vector dir;
     Scalar mag;
-
-    
 };
 
 template<typename Scalar, typename Vector>
 struct Impact {
     Vector pos;
-    Force<Scalar, Vector> F;
+    Vector J;
 };
 
-#endif
+#endif // FORCE_H

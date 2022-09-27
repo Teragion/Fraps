@@ -24,4 +24,4 @@ struct Contact {
     bool processed = false;
 };
 
-#endif
+#endif // CONTACT_H

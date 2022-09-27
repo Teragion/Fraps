@@ -481,4 +481,14 @@ void write_matlab(std::ostream& output, const std::vector<T>& a, const char *var
    output.precision(old_precision);
 }
 
-#endif
+template<class T>
+T wrap(const T &a, const T &b) {
+    return a < 0 ? a % b + b : a % b;
+}
+
+template<class T>
+T& at(std::vector<T>& v, int i) {
+    return v[wrap(i, static_cast<int>(v.size()))];
+};
+
+#endif // UTIL_H

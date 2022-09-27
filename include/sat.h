@@ -152,4 +152,4 @@ bool detect_collision_sat(const std::vector<Vector>& poly1, const std::vector<Ve
     return true;
 }
 
-#endif
+#endif // SAT_H
