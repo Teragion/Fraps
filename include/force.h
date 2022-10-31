@@ -11,6 +11,9 @@ template<typename Scalar, typename Vector>
 struct Impact {
     Vector pos;
     Vector J;
+
+    int i_s;
+    Scalar i_r;
 };
 
 #endif // FORCE_H

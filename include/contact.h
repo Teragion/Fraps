@@ -21,6 +21,14 @@ struct Contact {
     int i;
     int j;
 
+    int i_s;
+    int i_e;
+    Scalar i_r;
+
+    int j_s;
+    int j_e;
+    Scalar j_r;
+
     bool processed = false;
 };
 

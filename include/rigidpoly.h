@@ -106,9 +106,10 @@ struct RigidPoly {
     void calculate_section_mass_mmoi(Section& section);
     void init_sections();
 
-    void apply_impulse(Vector r, Vector j);
+    void apply_impulse(Vector r, Vector j, int i_s, Scalar i_r);
     bool check_fracture();
     void distribute_impulse();
+    bool find_impulse_side(Scalar i_r, int i_s, int id);
 
     void local_to_world();
     Vector calculate_world_vel(Vector r);
@@ -185,6 +186,37 @@ RigidPoly<Scalar, Vector>::detect_collision(RigidPoly<Scalar, Vector>& other) {
     ret.v_rel += cross(ret.r_i, omega);
     ret.r_j = ret.p - other.center;
     ret.v_rel -= cross(ret.r_j, other.omega);
+
+    // find indices
+    for (int i = 0; i < world.size(); i++) {
+        Vector a = world[i] - center;
+        Vector b = at(world, i + 1) - center;
+        if (collinear(a, b, ret.r_i)) {
+            ret.i_s = i;
+            ret.i_e = (i + 1) % world.size();
+
+            ret.i_r = norm(ret.r_i - a) / norm(b - a);
+            if (ret.i_r > 1) {
+                continue;
+            }
+            break;
+        }
+    }
+
+    for (int i = 0; i < other.world.size(); i++) {
+        Vector a = other.world[i] - center;
+        Vector b = at(other.world, i + 1) - other.center;
+        if (collinear(a, b, ret.r_j)) {
+            ret.j_s = i;
+            ret.j_e = (i + 1) % other.world.size();
+
+            ret.j_r = norm(ret.r_j - a) / norm(b - a);
+            if (ret.j_r > 1) {
+                continue;
+            }
+            break;
+        }
+    }
 
     return ret;
 }
@@ -452,8 +484,8 @@ void RigidPoly<Scalar, Vector>::init_inertia() {
     w_inv = 1.0 / w;
 
     sum_mmoi *= density;
-    mmoi -= w * dot(center_offset, center_offset);
-    I = sum_mmoi;
+    mmoi = sum_mmoi - w * dot(center_offset, center_offset);
+    I = mmoi;
     I_inv = 1.0 / I;
 }
 
@@ -518,20 +550,15 @@ void RigidPoly<Scalar, Vector>::init_sections() {
 }
 
 template<typename Scalar, typename Vector>
-void RigidPoly<Scalar, Vector>::apply_impulse(Vector r, Vector j) {
+void RigidPoly<Scalar, Vector>::apply_impulse(Vector r, Vector j, int i_s, Scalar i_r) {
     if (fixed) {
         return;
     }
 
-//    if (first_impact) {
-//        causing_impact.J = j;
-//        causing_impact.pos = r;
-//    }
-
     m += j;
     L += cross(r, j);
 
-    impacts.push_back({r, j});
+    impacts.push_back({r, j, i_s, i_r});
 
 //    if (!to_fracture) {
 //        m += j;
@@ -619,15 +646,16 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
         Scalar t1 = 0.0;
 
         for (auto& i : impacts) {
-            bool impulse_side = (dot(i.pos, s.normal) > dot(s.p, s.normal));
-            //        if (dot(s.c0, s.normal) > dot(s.p, s.normal)) {
-            //            impulse_side = !impulse_side;
-            //        }
-            if (dist2(i.pos, s.c0) > dist2(i.pos, s.c1)) {
-                impulse_side = true;
-            } else {
-                impulse_side = false;
-            }
+//            bool impulse_side = (dot(i.pos, s.normal) > dot(s.p, s.normal));
+//            //        if (dot(s.c0, s.normal) > dot(s.p, s.normal)) {
+//            //            impulse_side = !impulse_side;
+//            //        }
+//            if (dist2(i.pos, s.c0) > dist2(i.pos, s.c1)) {
+//                impulse_side = true;
+//            } else {
+//                impulse_side = false;
+//            }
+            bool impulse_side = find_impulse_side(i.i_r, i.i_s, idx);
             // impulse_side = if impulse at c1 side
 
             Scalar domega = cross(i.pos, i.J);
@@ -635,16 +663,21 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
             if (impulse_side) {
                 // calculating torque transfer to side 0
                 t0 += domega * s.I0;
-                t0 += domega * s.w0 * norm2(s.c0);
+//                t0 += domega * s.w0 * norm2(s.c0);
             } else {
                 t1 += domega * s.I1;
-                t1 += domega * s.w1 * norm2(s.c1);
+//                t1 += domega * s.w1 * norm2(s.c1);
             }
+            std::cout << impulse_side << std::endl;
+        }
+        if ((t0 > t1 && s.w0 > s.w1 * 2) || (t0 < t1 && s.w1 > s.w0 * 2)) {
+            continue;
         }
         // cancelling
         Scalar transfer = std::abs(t0 - t1);
         Scalar stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
         std::cout << stress << std::endl;
+
         if (stress > stress_toleration) {
             to_fracture = true;
             if (stress > max_stress) {
@@ -671,15 +704,16 @@ void RigidPoly<Scalar, Vector>::distribute_impulse() {
     Scalar max_transfer = (stress_toleration * moment_of_inertia(s.length) / (s.length / 2)) * fracture_dt;
 
     for (auto& i : impacts) {
-        bool impulse_side = (dot(i.pos, s.normal) > dot(s.p, s.normal));
+//        bool impulse_side = (dot(i.pos, s.normal) > dot(s.p, s.normal));
 //        if (dot(s.c0, s.normal) > dot(s.p, s.normal)) {
 //            impulse_side = !impulse_side;
 //        }
-        if (dist2(i.pos, s.c0) > dist2(i.pos, s.c1)) {
-            impulse_side = true;
-        } else {
-            impulse_side = false;
-        }
+//        if (dist2(i.pos, s.c0) > dist2(i.pos, s.c1)) {
+//            impulse_side = true;
+//        } else {
+//            impulse_side = false;
+//        }
+        bool impulse_side = find_impulse_side(i.i_r, i.i_s, fracture_pos);
         // impulse_side = if impulse at c1 side
 
         if (!detached) {
@@ -689,11 +723,11 @@ void RigidPoly<Scalar, Vector>::distribute_impulse() {
             if (impulse_side) {
                 // calculating torque transfer to side 0
                 t = domega * s.I0;
-                t += domega * norm2(s.c0) * s.w0;
+//                t += domega * norm2(s.c0) * s.w0;
                 t0 += t;
             } else {
                 t = domega * s.I1;
-                t += domega * norm2(s.c1) * s.w1;
+//                t += domega * norm2(s.c1) * s.w1;
                 t1 += t;
             }
             Scalar transfer = std::abs(t0 - t1);
@@ -730,6 +764,40 @@ void RigidPoly<Scalar, Vector>::distribute_impulse() {
 }
 
 template<typename Scalar, typename Vector>
+bool RigidPoly<Scalar, Vector>::find_impulse_side(Scalar i_r, int i_s, int id) {
+    auto& s = sections[id];
+    int cur_side = 0;
+    for (int i = 0; i < verts.size(); i++) {
+        if (i == s.j0.idx_v0) {
+            if (i == i_s) {
+                Scalar p_r = norm(s.j0.p - verts[i]) / norm(at(verts, i + 1) - verts[i]);
+                if (p_r > i_r) {
+                    return cur_side == 1;
+                } else {
+                    return cur_side != 1;
+                }
+            }
+            cur_side = 1 - cur_side;
+        } else if (i == s.j1.idx_v0) {
+            if (i == i_s) {
+                Scalar p_r = norm(s.j1.p - verts[i]) / norm(at(verts, i + 1) - verts[i]);
+                if (p_r > i_r) {
+                    return cur_side == 1;
+                } else {
+                    return cur_side != 1;
+                }
+            }
+            cur_side = 1 - cur_side;
+        }
+        if (cur_side == 0) {
+            if (i == i_s) { return false; }
+        } else {
+            if (i == i_s) { return true; }
+        }
+    }
+}
+
+    template<typename Scalar, typename Vector>
 void RigidPoly<Scalar, Vector>::local_to_world() {
     Scalar a11 = std::cos(rot);
     Scalar a12 = -std::sin(rot);

@@ -532,7 +532,7 @@ bool rightOn(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
 
 template<unsigned int N, class T>
 bool collinear(const Vec<N, T> &a, const Vec<N, T> &b, const Vec<N, T> &c) {
-    return area(a, b, c) == 0;
+    return std::abs(area(a, b, c)) < 1E-4;
 }
 
 #endif // VEC_H

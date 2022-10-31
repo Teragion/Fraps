@@ -4,7 +4,6 @@
 #include "util/monitor.h"
 
 #include "collision_parameters.h"
-#include "fracture.h"
 #include "rigidpoly.h"
 #include "vec.h"
 
@@ -64,9 +63,11 @@ Scalar detect_contact(std::vector<RigidPoly<Scalar, Vector> >& objs,
                 continue;
             }
             contact_type contact = objs[i].detect_collision(objs[j]);
+#ifdef ADAPTIVE_STEP
             if (contact.depth < -depth_tolerance) {
                 return contact.depth;
             }
+#endif
             if (contact.depth < depth_tolerance) {
                 Scalar v_rel_s = dot(contact.v_rel, contact.direction);
                 contact.v_rel_s = v_rel_s;
@@ -82,28 +83,28 @@ Scalar detect_contact(std::vector<RigidPoly<Scalar, Vector> >& objs,
 #endif
                 contact.i = i;
                 contact.j = j;
-                //                if (contact.f2f) {
-                //                    contact_type c1 = contact;
-                //                    c1.p = c1.p + c1.f2f_offset;
-                //                    c1.v_rel = objs[j].v - objs[i].v;
-                //                    c1.r_i = c1.p - objs[i].center;
-                //                    c1.v_rel -= Vector{objs[i].omega * -c1.r_i(1), objs[i].omega * c1.r_i(0)};
-                //                    c1.r_j = c1.p - objs[j].center;
-                //                    c1.v_rel += Vector{objs[j].omega * -c1.r_j(1), objs[j].omega * c1.r_j(0)};
-                //
-                //                    contact_type c2 = contact;
-                //                    c2.p = c2.p - c2.f2f_offset;
-                //                    c2.v_rel = objs[j].v - objs[i].v;
-                //                    c2.r_i = c2.p - objs[i].center;
-                //                    c2.v_rel -= Vector{objs[i].omega * -c2.r_i(1), objs[i].omega * c2.r_i(0)};
-                //                    c2.r_j = c2.p - objs[j].center;
-                //                    c2.v_rel += Vector{objs[j].omega * -c2.r_j(1), objs[j].omega * c2.r_j(0)};
-                //
-                //                    impulse.push_back(c1);
-                //                    impulse.push_back(c2);
-                //                } else {
-                impulse.push_back(contact);
-                //                }
+                if (contact.f2f) {
+                    contact_type c1 = contact;
+                    c1.p = c1.p + c1.f2f_offset;
+                    c1.v_rel = objs[j].v - objs[i].v;
+                    c1.r_i = c1.p - objs[i].center;
+                    c1.v_rel -= Vector{objs[i].omega * -c1.r_i(1), objs[i].omega * c1.r_i(0)};
+                    c1.r_j = c1.p - objs[j].center;
+                    c1.v_rel += Vector{objs[j].omega * -c1.r_j(1), objs[j].omega * c1.r_j(0)};
+
+                    contact_type c2 = contact;
+                    c2.p = c2.p - c2.f2f_offset;
+                    c2.v_rel = objs[j].v - objs[i].v;
+                    c2.r_i = c2.p - objs[i].center;
+                    c2.v_rel -= Vector{objs[i].omega * -c2.r_i(1), objs[i].omega * c2.r_i(0)};
+                    c2.r_j = c2.p - objs[j].center;
+                    c2.v_rel += Vector{objs[j].omega * -c2.r_j(1), objs[j].omega * c2.r_j(0)};
+
+                    impulse.push_back(c1);
+                    impulse.push_back(c2);
+                } else {
+                    impulse.push_back(contact);
+                }
             }
         }
     }
@@ -124,8 +125,8 @@ void process_impulse(std::vector<RigidPoly<Scalar, Vector> >& objs,
     int processed = 0;
 #endif
     while (true) {
-        itr++;
 #ifndef NDEBUG
+        itr++;
         std::cout << "process_impulse, itr = " << itr << std::endl;
         std::cout << "\t\tprocessed = " << processed << std::endl;
 #endif
@@ -162,8 +163,8 @@ void process_impulse(std::vector<RigidPoly<Scalar, Vector> >& objs,
 //                objs[contact.j].L += cross(contact.r_j, J);
 //            }
 
-            objs[contact.i].apply_impulse(contact.r_i, -J);
-            objs[contact.j].apply_impulse(contact.r_j, J);
+            objs[contact.i].apply_impulse(contact.r_i, -J, contact.i_s, contact.i_r);
+            objs[contact.j].apply_impulse(contact.r_j, J, contact.j_s, contact.j_r);
 
             contact.processed = true;
         }
@@ -670,24 +671,32 @@ int main() {
     std::vector<RigidPoly<Scalar, Vector> > objs;
 
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, -1.0}, {-5.0, 1.0}, {-6.0, 1.0}, {-6.0, -1.0}}, 1.0));
-    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, 0.0}, {-5.0, 0.7}, {-5.5, 0.8}, {-5.5, 1.2}, {-5.0, 1.3},
-                                                 {-5.0, 2.0}, {-6.5, 2.0}, {-6.5, 1.3}, {-6.0, 1.2}, {-6.0, 0.8},
-                                                 {-6.5, 0.7}, {-6.5, 0.0}}, 1.0));
-    objs[0].enable_fracture = true;
-    objs[0].convex_decompose();
-    objs[0].stress_toleration = 6000;
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, 0.0}, {-5.0, 0.7}, {-5.5, 0.8}, {-5.5, 1.2}, {-5.0, 1.3},
+//                                                 {-5.0, 2.0}, {-6.5, 2.0}, {-6.5, 1.3}, {-6.0, 1.2}, {-6.0, 0.8},
+//                                                 {-6.5, 0.7}, {-6.5, 0.0}}, 1.0));
+//    objs[0].enable_fracture = false;
+//    objs[0].convex_decompose();
+//    objs[0].stress_toleration = 1000;
+//
+    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.8}, {6.0, 1.0}, {6.0, 2.6}}, 4.0));
+    objs[0].enable_fracture = false;
+    objs[0].m = {0, 10};
+//    objs[0].I *= 0.01;
+//    objs[0].I_inv *= 100;
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.8}, {6.0, 1.0}, {6.0, 2.6}}, 1.0));
-    objs[1].enable_fracture = false;
-    objs[1].m = {-15, 0};
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-7.5, 2.0}, {-4.5, 2.0}, {-5.75, 3.0}}, 1.0));
+//    objs[2].enable_fracture = false;
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, -4.0}, {-5.0, -2.0}, {-6.5, -2.0}, {-6.5, -4.0}}, 1.0));
-    objs[2].enable_fracture = true;
-    objs[2].stress_toleration = 6000;
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, -4.0}, {-5.0, -2.0}, {-6.5, -2.0}, {-6.5, -4.0}}, 1.0));
+//    objs[2].enable_fracture = true;
+//    objs[2].stress_toleration = 6000;
+//
+//    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, -2.2}, {6.0, -3.0}, {6.0, -1.4}}, 1.0));
+//    objs[3].enable_fracture = false;
+//    objs[3].m = {-15, 0};
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, -2.2}, {6.0, -3.0}, {6.0, -1.4}}, 1.0));
-    objs[3].enable_fracture = false;
-    objs[3].m = {-15, 0};
+    objs.push_back(RigidPoly<Scalar, Vector>({{-10.5, 0.0}, {-10.5, -0.5}, {10.5, -0.5}, {10.5, 0.0}}, 1.0));
+    objs[1].set_fixed();
 
     for (auto& obj : objs) {
         if (obj.enable_fracture) {
@@ -710,9 +719,9 @@ int main() {
     Scalar suggest;
 
     while (!mon.shouldClose) {
-        std::cout << "t: " << t << std::endl;
+//        std::cout << "t: " << t << std::endl;
         const double t1 = glfwGetTime();
-        std::cout << "t1: " << t1 << std::endl;
+//        std::cout << "t1: " << t1 << std::endl;
         if (t > t1) {
             std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(std::floor((t - t1) * 1000))));
         }
@@ -752,12 +761,13 @@ int main() {
             continue;
         }
 
-        // fine tune the step size
-        Scalar cur_step = dt / 2.0;
         ode(objs, dt);
         t += dt;
+#ifdef ADAPTIVE_STEP
+        // fine tune the step size
         bool flag = false;
         int attempt = 0;
+        Scalar cur_step = dt / 2.0;
         while (true) {
             attempt++;
             if (attempt > 20) {
@@ -765,8 +775,8 @@ int main() {
             }
             Scalar ret = detect_contact(objs, impulse, resting, suggest);
 #ifndef NDEBUG
-            std::cout << "depth: "<< ret << std::endl;
-            std::cout << "t: "<< t << std::endl;
+            std::cout << "depth: " << ret << std::endl;
+            std::cout << "t: " << t << std::endl;
 #endif
             if (ret < -depth_tolerance) {
                 ode(objs, -cur_step);
@@ -783,10 +793,11 @@ int main() {
                 break;
             }
         }
+#endif
 
         if (t1 - lframe > draw_step) {
             frame_count++;
-            std::cout << "Frame: " << frame_count << std::endl;
+//            std::cout << "Frame: " << frame_count << std::endl;
             lframe = t1;
             // drawing procedure
             mon.clear();

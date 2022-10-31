@@ -125,9 +125,9 @@ bool construct_cross_section(const Intersection& i0, const Intersection& i1, con
 std::vector<Section> find_cross_sections(const Polygon<double, Vec<2, double> >& shape) {
     std::vector<Section> ret;
     const int num_directions = 12;
-    const int num_offsets = 10;
-    const double left = -2.0;
-    const double right = 2.0;
+    const int num_offsets = 4;
+    const double left = -0.2;
+    const double right = 0.2;
 
     for (int i = 0; i < num_directions; i++) {
         const double theta = i * (M_PI / static_cast<double>(num_directions));
