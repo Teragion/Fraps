@@ -674,18 +674,22 @@ int main() {
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, 0.0}, {-5.0, 0.7}, {-5.5, 0.8}, {-5.5, 1.2}, {-5.0, 1.3},
 //                                                 {-5.0, 2.0}, {-6.5, 2.0}, {-6.5, 1.3}, {-6.0, 1.2}, {-6.0, 0.8},
 //                                                 {-6.5, 0.7}, {-6.5, 0.0}}, 1.0));
-//    objs[0].enable_fracture = false;
+//    objs[0].enable_fracture = true;
 //    objs[0].convex_decompose();
 //    objs[0].stress_toleration = 1000;
 //
-    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.8}, {6.0, 1.0}, {6.0, 2.6}}, 4.0));
-    objs[0].enable_fracture = false;
-    objs[0].m = {0, 10};
-//    objs[0].I *= 0.01;
-//    objs[0].I_inv *= 100;
+    for (int i = 0; i < 6; i++) {
+        objs.push_back(RigidPoly<Scalar, Vector>({{i - 7.5, 0.0}, {i - 7.5, 4.0}, {i - 8.0, 4.0}, {i - 8.0, 0.0}}, 4.0));
+        objs[i].enable_fracture = true;
+        objs[i].stress_toleration = 18000;
+    }
 
-//    objs.push_back(RigidPoly<Scalar, Vector>({{-7.5, 2.0}, {-4.5, 2.0}, {-5.75, 3.0}}, 1.0));
-//    objs[2].enable_fracture = false;
+    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.8}, {6.0, 1.0}, {6.0, 2.6}}, 4.0));
+    objs[6].enable_fracture = false;
+    objs[6].m = {-70, 14};
+
+    objs.push_back(RigidPoly<Scalar, Vector>({{-8.5, 4.0}, {-2.0, 4.0}, {-5.25, 4.5}}, 1.0));
+    objs[7].enable_fracture = false;
 
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, -4.0}, {-5.0, -2.0}, {-6.5, -2.0}, {-6.5, -4.0}}, 1.0));
 //    objs[2].enable_fracture = true;
@@ -696,7 +700,7 @@ int main() {
 //    objs[3].m = {-15, 0};
 
     objs.push_back(RigidPoly<Scalar, Vector>({{-10.5, 0.0}, {-10.5, -0.5}, {10.5, -0.5}, {10.5, 0.0}}, 1.0));
-    objs[1].set_fixed();
+    objs[8].set_fixed();
 
     for (auto& obj : objs) {
         if (obj.enable_fracture) {

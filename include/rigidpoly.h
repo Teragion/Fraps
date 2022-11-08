@@ -10,6 +10,7 @@
 #include "section.h"
 #include "vec.h"
 
+#include <assert.h>
 #include <limits>
 #include <list>
 #include <initializer_list>
@@ -668,7 +669,9 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
                 t1 += domega * s.I1;
 //                t1 += domega * s.w1 * norm2(s.c1);
             }
+#ifndef NDEBUG
             std::cout << impulse_side << std::endl;
+#endif
         }
         if ((t0 > t1 && s.w0 > s.w1 * 2) || (t0 < t1 && s.w1 > s.w0 * 2)) {
             continue;
@@ -676,7 +679,6 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
         // cancelling
         Scalar transfer = std::abs(t0 - t1);
         Scalar stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
-        std::cout << stress << std::endl;
 
         if (stress > stress_toleration) {
             to_fracture = true;
@@ -686,8 +688,9 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
             }
         }
     }
-
+#ifndef NDEBUG
     std::cout << max_stress << std::endl;
+#endif
 
     return to_fracture;
 }
@@ -716,17 +719,26 @@ void RigidPoly<Scalar, Vector>::distribute_impulse() {
         bool impulse_side = find_impulse_side(i.i_r, i.i_s, fracture_pos);
         // impulse_side = if impulse at c1 side
 
+        Scalar domega = 0.0;
         if (!detached) {
-            Scalar domega = cross(i.pos, i.J);
+            Vector offset;
+            if (impulse_side) {
+                offset = i.pos - s.c1;
+            } else {
+                offset = i.pos - s.c0;
+            }
+            Scalar side_torque = cross(offset, i.J);
+            Scalar body_torque = cross(i.pos, i.J);
+            domega += body_torque / I;
             Scalar t;
 
             if (impulse_side) {
                 // calculating torque transfer to side 0
-                t = domega * s.I0;
+                t = side_torque;
 //                t += domega * norm2(s.c0) * s.w0;
                 t0 += t;
             } else {
-                t = domega * s.I1;
+                t = side_torque;
 //                t += domega * norm2(s.c1) * s.w1;
                 t1 += t;
             }
