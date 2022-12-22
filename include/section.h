@@ -121,8 +121,10 @@ bool construct_cross_section(const Intersection& i0, const Intersection& i1, con
 
     Vector p = (i0.p + i1.p) * 0.5;
 
+#ifndef NDEBUG
     std::cout << "dpde " << dpde[0] << " " << dpde[1] << std::endl;
     std::cout << "p " << p[0] << " " << p[1] << std::endl;
+#endif
 
     ret.normal = dpde;
 
@@ -138,9 +140,23 @@ bool construct_cross_section(const Intersection& i0, const Intersection& i1, con
     ret.length = dist(ret.j0.p, ret.j1.p);
     ret.p = p;
 
+#ifndef NDEBUG
     std::cout << "section found" << std::endl;
     std::cout << "v0" << ret.j0.p[0] << " " << ret.j0.p[1] << std::endl;
     std::cout << "v1" << ret.j1.p[0] << " " << ret.j1.p[1] << std::endl;
+#endif
+
+    normalize(ret.normal);
+    // let normal points to s0
+    if (ret.j0.idx_v0 < ret.j1.idx_v0) {
+        if (dot(shape[i0.idx_v1] - shape[i0.idx_v0], ret.normal) > 0) {
+            ret.normal = -ret.normal;
+        }
+    } else {
+        if (dot(shape[i1.idx_v1] - shape[i1.idx_v0], ret.normal) > 0) {
+            ret.normal = -ret.normal;
+        }
+    }
 
     return true;
 }
@@ -148,9 +164,11 @@ bool construct_cross_section(const Intersection& i0, const Intersection& i1, con
 std::vector<Section> find_cross_sections(const std::vector<Vector>& shape) {
     std::vector<Section> ret;
     const int num_directions = 12;
-    const int num_offsets = 10;
+    const int num_offsets = 6;
     const double left = -2.0;
     const double right = 2.0;
+
+    const double length_threshold = 0.01;
 
     for (int i = 0; i < num_directions; i++) {
         const double theta = i * (M_PI / static_cast<double>(num_directions));
@@ -170,10 +188,12 @@ std::vector<Section> find_cross_sections(const std::vector<Vector>& shape) {
 
                 intersections.push_back({p, k, static_cast<int>((k + 1) % shape.size())});
             }
+#ifndef NDEBUG
             std::cout << std::endl << normal[0] << " " << normal[1] << " " << offset << std::endl;
             for (auto const & itsc : intersections) {
                 std::cout << itsc.p[0] << " " << itsc.p[1] << std::endl;
             }
+#endif
 
             assert(intersections.size() % 2 == 0);
 
@@ -185,7 +205,8 @@ std::vector<Section> find_cross_sections(const std::vector<Vector>& shape) {
             for (unsigned int k = 0; k < intersections.size(); k += 2) {
                 Section s;
                 if (construct_cross_section(intersections[k], intersections[k + 1], shape, s)) {
-                    ret.push_back(s);
+                    if (s.length > length_threshold)
+                        ret.push_back(s);
                 }
             }
         }

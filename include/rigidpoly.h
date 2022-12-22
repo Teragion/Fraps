@@ -11,6 +11,7 @@
 #include "vec.h"
 
 #include <assert.h>
+
 #include <limits>
 #include <list>
 #include <initializer_list>
@@ -112,6 +113,7 @@ struct RigidPoly {
     void distribute_impulse();
     bool find_impulse_side(Scalar i_r, int i_s, int id);
 
+    Vector local_to_world(const Vector& r);
     void local_to_world();
     Vector calculate_world_vel(Vector r);
     Vector calculate_world_vel_last(Vector r);
@@ -559,6 +561,9 @@ void RigidPoly<Scalar, Vector>::apply_impulse(Vector r, Vector j, int i_s, Scala
     m += j;
     L += cross(r, j);
 
+    v = m * w_inv;
+    omega = L * I_inv;
+
     impacts.push_back({r, j, i_s, i_r});
 
 //    if (!to_fracture) {
@@ -634,6 +639,11 @@ void RigidPoly<Scalar, Vector>::apply_impulse(Vector r, Vector j, int i_s, Scala
 
 template<typename Scalar, typename Vector>
 bool RigidPoly<Scalar, Vector>::check_fracture() {
+    Scalar a11 = std::cos(rot);
+    Scalar a12 = -std::sin(rot);
+    Scalar a21 = -a12;
+    Scalar a22 = a11;
+
     Scalar max_stress = 0.0;
     fracture_pos = -1;
     to_fracture = false;
@@ -645,6 +655,25 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
         auto& s = sections[idx];
         Scalar t0 = 0.0;
         Scalar t1 = 0.0;
+
+        Vector j0{0, 0};
+        Vector j1{0, 0};
+        Vector j{0, 0};
+
+        Scalar domega = 0.0;
+
+        Vector c0;
+        Vector c1;
+        Vector p;
+
+        c0(0) = a11 * s.c0(0) + a12 * s.c0(1);
+        c0(1) = a21 * s.c0(0) + a22 * s.c0(1);
+
+        c1(0) = a11 * s.c1(0) + a12 * s.c1(1);
+        c1(1) = a21 * s.c1(0) + a22 * s.c1(1);
+
+        p(0) = a11 * s.p(0) + a12 * s.p(1);
+        p(1) = a21 * s.p(0) + a22 * s.p(1);
 
         for (auto& i : impacts) {
 //            bool impulse_side = (dot(i.pos, s.normal) > dot(s.p, s.normal));
@@ -659,26 +688,74 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
             bool impulse_side = find_impulse_side(i.i_r, i.i_s, idx);
             // impulse_side = if impulse at c1 side
 
-            Scalar domega = cross(i.pos, i.J);
-
+            Vector offset;
             if (impulse_side) {
-                // calculating torque transfer to side 0
-                t0 += domega * s.I0;
-//                t0 += domega * s.w0 * norm2(s.c0);
+                offset = i.pos - c1;
             } else {
-                t1 += domega * s.I1;
-//                t1 += domega * s.w1 * norm2(s.c1);
+                offset = i.pos - c0;
             }
+
 #ifndef NDEBUG
-            std::cout << impulse_side << std::endl;
+            std::cout << "impulse side: " << impulse_side << std::endl;
+            std::cout << "i.pos: " << i.pos(0) << " " << i.pos(1) << std::endl;
+            std::cout << "i.i_r: " << i.i_r << std::endl;
+            std::cout << "i.i_s: " << i.i_s << std::endl;
+            std::cout << "c1: " << c1(0) << " " << c1(1) << std::endl;
+            std::cout << "offset: " << offset(0) << " " << offset(1) << std::endl;
 #endif
+
+            Scalar side_torque = cross(offset, i.J);
+            Scalar body_torque = cross(i.pos, i.J);
+            domega += body_torque * I_inv;
+            Scalar t;
+
+            if (!impulse_side) {
+                // calculating torque transfer to side 0
+                t = side_torque;
+                //                t += domega * norm2(s.c0) * s.w0;
+                t0 += t;
+                j0 += i.J;
+            } else {
+                t = side_torque;
+                //                t += domega * norm2(s.c1) * s.w1;
+                t1 += t;
+                j1 += i.J;
+            }
+            j += i.J;
         }
-        if ((t0 > t1 && s.w0 > s.w1 * 2) || (t0 < t1 && s.w1 > s.w0 * 2)) {
-            continue;
-        }
+        // adjust for shear force
+        t0 += cross(p - c0, j * (s.w0 / w) - j0);
+        t1 += cross(p - c1, j * (s.w1 / w) - j1);
+
+        Scalar transfer0 = std::abs(domega * s.I0 - t0);
+        Scalar transfer1 = std::abs(domega * s.I1 - t1);
+        Scalar transfer = std::max(transfer0, transfer1);
         // cancelling
-        Scalar transfer = std::abs(t0 - t1);
         Scalar stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
+        // 2nd-mmoi / r_max = section_modulus
+
+        Scalar tangential_impulse = dot(j * (s.w0 / w) - j0, s.normal);
+        stress = stress - tangential_impulse / fracture_dt;
+
+#ifndef NDEBUG
+        std::cout << "id: " << idx << std::endl;
+        std::cout << "stress: " << stress << std::endl;
+        std::cout << "c0: " << c0 << std::endl;
+        std::cout << "c1: " << c1 << std::endl;
+        std::cout << "w0: " << s.w0 << std::endl;
+        std::cout << "w1: " << s.w1 << std::endl;
+        std::cout << "t0: " << t0 << std::endl;
+        std::cout << "t1: " << t1 << std::endl;
+        std::cout << "transfer0: " << domega * s.I0 - t0 << std::endl;
+        std::cout << "transfer1: " << domega * s.I1 - t1 << std::endl;
+        std::cout << "j0: " << j0 << std::endl;
+        std::cout << "j1: " << j1 << std::endl;
+        std::cout << "j: " << j << std::endl;
+        std::cout << "shear0: " << cross(p - c0, j * (s.w0 / w) - j0) << std::endl;
+        std::cout << "shear1: " << cross(p - c1, j * (s.w1 / w) - j1) << std::endl;
+        std::cout << "tangential: " << tangential_impulse / fracture_dt << std::endl;
+        std::cout << "s.normal: " << s.normal << std::endl;
+#endif
 
         if (stress > stress_toleration) {
             to_fracture = true;
@@ -689,7 +766,8 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
         }
     }
 #ifndef NDEBUG
-    std::cout << max_stress << std::endl;
+    std::cout << "max_stress = " << max_stress << std::endl;
+    std::cout << "section id = " << fracture_pos << std::endl;
 #endif
 
     return to_fracture;
@@ -700,78 +778,179 @@ void RigidPoly<Scalar, Vector>::distribute_impulse() {
     assert(to_fracture);
     assert(fracture_pos >= 0);
 
+
     auto& s = sections[fracture_pos];
     Scalar t0 = 0.0;
     Scalar t1 = 0.0;
 
-    Scalar max_transfer = (stress_toleration * moment_of_inertia(s.length) / (s.length / 2)) * fracture_dt;
+    Vector j0{0, 0};
+    Vector j1{0, 0};
+    Vector j{0, 0};
 
+    Scalar a11 = std::cos(rot);
+    Scalar a12 = -std::sin(rot);
+    Scalar a21 = -a12;
+    Scalar a22 = a11;
+
+    Vector c0;
+    Vector c1;
+    Vector p;
+
+    c0(0) = a11 * s.c0(0) + a12 * s.c0(1);
+    c0(1) = a21 * s.c0(0) + a22 * s.c0(1);
+
+    c1(0) = a11 * s.c1(0) + a12 * s.c1(1);
+    c1(1) = a21 * s.c1(0) + a22 * s.c1(1);
+
+    p(0) = a11 * s.p(0) + a12 * s.p(1);
+    p(1) = a21 * s.p(0) + a22 * s.p(1);
+
+    new_m0 = 0.0;
+    new_m1 = 0.0;
+
+    Scalar domega = 0.0;
     for (auto& i : impacts) {
-//        bool impulse_side = (dot(i.pos, s.normal) > dot(s.p, s.normal));
-//        if (dot(s.c0, s.normal) > dot(s.p, s.normal)) {
-//            impulse_side = !impulse_side;
-//        }
-//        if (dist2(i.pos, s.c0) > dist2(i.pos, s.c1)) {
-//            impulse_side = true;
-//        } else {
-//            impulse_side = false;
-//        }
         bool impulse_side = find_impulse_side(i.i_r, i.i_s, fracture_pos);
         // impulse_side = if impulse at c1 side
 
-        Scalar domega = 0.0;
-        if (!detached) {
-            Vector offset;
-            if (impulse_side) {
-                offset = i.pos - s.c1;
-            } else {
-                offset = i.pos - s.c0;
-            }
-            Scalar side_torque = cross(offset, i.J);
-            Scalar body_torque = cross(i.pos, i.J);
-            domega += body_torque / I;
-            Scalar t;
-
-            if (impulse_side) {
-                // calculating torque transfer to side 0
-                t = side_torque;
-//                t += domega * norm2(s.c0) * s.w0;
-                t0 += t;
-            } else {
-                t = side_torque;
-//                t += domega * norm2(s.c1) * s.w1;
-                t1 += t;
-            }
-            Scalar transfer = std::abs(t0 - t1);
-            if (transfer > max_transfer) {
-                detached = true;
-                // first distribute
-                Scalar ratio = 1 - std::abs((transfer - max_transfer) / t);
-                new_m0 += i.J * (s.w0 / w) * ratio;
-                new_m1 += i.J * (s.w1 / w) * ratio;
-
-                new_L0 += domega * s.I0 * ratio;
-                new_L1 += domega * s.I1 * ratio;
-
-            } else {
-                // evenly distribute
-                new_m0 += i.J * (s.w0 / w);
-                new_m1 += i.J * (s.w1 / w);
-
-                new_L0 += domega * s.I0;
-                new_L1 += domega * s.I1;
-            }
+        Vector offset;
+        if (impulse_side) {
+            offset = i.pos - c1;
         } else {
-            if (impulse_side) {
-                Vector r = i.pos - s.c1;
-                new_m1 += i.J;
-                new_L1 += cross(r, i.J);
-            } else {
-                Vector r = i.pos - s.c0;
-                new_m0 += i.J;
-                new_L0 += cross(r, i.J);
+            offset = i.pos - c0;
+        }
+        Scalar side_torque = cross(offset, i.J);
+        Scalar body_torque = cross(i.pos, i.J);
+        domega += body_torque * I_inv;
+        Scalar t;
+        // TODO: consider tangential stress
+
+        if (!impulse_side) {
+            // calculating torque transfer to side 0
+            t = side_torque;
+//                t += domega * norm2(s.c0) * s.w0;
+            t0 += t;
+            j0 += i.J;
+        } else {
+            t = side_torque;
+//                t += domega * norm2(s.c1) * s.w1;
+            t1 += t;
+            j1 += i.J;
+        }
+        j += i.J;
+    }
+    // adjust for shear force
+    Scalar shear0 = cross(p - c0, j * (s.w0 * w_inv) - j0);
+    t0 += shear0;
+    Scalar shear1 = cross(p - c1, j * (s.w1 * w_inv) - j1);
+    t1 += shear1;
+
+    Scalar transfer0 = std::abs(domega * s.I0 - t0);
+    Scalar transfer1 = std::abs(domega * s.I1 - t1);
+    Scalar transfer = std::max(transfer0, transfer1);
+
+    Scalar tangential_impulse = dot(j * (s.w0 / w) - j0, s.normal);
+    Scalar max_transfer = ((stress_toleration + tangential_impulse / fracture_dt) * moment_of_inertia(s.length) / (s.length / 2)) * fracture_dt;
+
+#ifndef NDEBUG
+    std::cout << "max_transfer: " << max_transfer << std::endl;
+    std::cout << "c0: " << c0 << std::endl;
+    std::cout << "c1: " << c1 << std::endl;
+    std::cout << "t0: " << t0 << std::endl;
+    std::cout << "t1: " << t1 << std::endl;
+    std::cout << "transfer0: " << domega * s.I0 - t0 << std::endl;
+    std::cout << "transfer1: " << domega * s.I1 - t1 << std::endl;
+    std::cout << "shear0: " << shear0 << std::endl;
+    std::cout << "shear1: " << shear1 << std::endl;
+#endif
+    if (transfer > max_transfer) {
+        detached = true;
+
+        new_m0 = m * (s.w0 / w);
+        new_m1 = m * (s.w1 / w);
+
+        new_L0 = omega_last * s.I0 + t0;
+        new_L1 = omega_last * s.I1 + t1;
+#define DIST_M2
+#ifdef DIST_M1
+        // method 1:
+        if (transfer0 > max_transfer) {
+            if (t0 > domega * s.I0) {
+                new_L0 -= max_transfer;
+                new_L1 -= max_transfer;
+            }
+            else {
+                new_L0 += max_transfer;
+                new_L1 += max_transfer;
+            }
+        } else if (transfer1 > max_transfer) {
+            if (t1 > domega * s.I1) {
+                new_L0 -= max_transfer;
+                new_L1 -= max_transfer;
+            }
+            else {
+                new_L0 += max_transfer;
+                new_L1 += max_transfer;
             }
         }
+#endif
+
+#ifdef DIST_M2
+        // method 2:
+        if (transfer0 > max_transfer) {
+            transfer = std::min(std::min(transfer0, transfer1), max_transfer);
+            if (t0 > domega * s.I0) {
+                new_L0 -= transfer;
+                new_L1 += transfer;
+            }
+            else {
+                new_L0 += transfer;
+                new_L1 -= transfer;
+            }
+        } else if (transfer1 > max_transfer) {
+            transfer = std::min(std::min(transfer0, transfer1), max_transfer);
+            if (t1 > domega * s.I1) {
+                new_L0 += transfer;
+                new_L1 -= transfer;
+            }
+            else {
+                new_L0 -= transfer;
+                new_L1 += transfer;
+            }
+        }
+#endif
+
+#ifdef DIST_M3
+        // method 3:
+        if (transfer0 > max_transfer) {
+            if (t0 > domega * s.I0) {
+                new_L0 -= max_transfer;
+                new_L1 += max_transfer;
+            }
+            else {
+                new_L0 += max_transfer;
+                new_L1 -= max_transfer;
+            }
+        } else if (transfer1 > max_transfer) {
+            if (t1 > domega * s.I1) {
+                new_L0 += max_transfer;
+                new_L1 -= max_transfer;
+            }
+            else {
+                new_L0 -= max_transfer;
+                new_L1 += max_transfer;
+            }
+        }
+#endif
+
+#ifndef NDEBUG
+        std::cout << "L0: " << new_L0 << std::endl;
+        std::cout << "L1: " << new_L1 << std::endl;
+        std::cout << "c0: " << c0(0) << " " << c0(1) << std::endl;
+        std::cout << "c1: " << c1(0) << " " << c1(1) << std::endl;
+#endif
+    } else {
+        assert(false);
     }
 }
 
@@ -809,7 +988,17 @@ bool RigidPoly<Scalar, Vector>::find_impulse_side(Scalar i_r, int i_s, int id) {
     }
 }
 
-    template<typename Scalar, typename Vector>
+template<typename Scalar, typename Vector>
+Vector RigidPoly<Scalar, Vector>::local_to_world(const Vector& r) {
+    Scalar a11 = std::cos(rot);
+    Scalar a12 = -std::sin(rot);
+    Scalar a21 = -a12;
+    Scalar a22 = a11;
+
+    return {a11 * r(0) + a12 * r(1), a21 * r(0) + a22 * r(1)};
+}
+
+template<typename Scalar, typename Vector>
 void RigidPoly<Scalar, Vector>::local_to_world() {
     Scalar a11 = std::cos(rot);
     Scalar a12 = -std::sin(rot);

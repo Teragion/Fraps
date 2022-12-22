@@ -21,6 +21,8 @@
 
 #include <cassert>
 
+#include <png.h>
+
 using contact_type = Contact<Scalar, Vector>;
 
 Scalar dt_last = dt;
@@ -655,10 +657,13 @@ void detach(std::vector<RigidPoly<Scalar, Vector> >& objs) {
             s0.L = objs[k].new_L0;
             s1.L = objs[k].new_L1;
 
-            s0.center = objs[k].center + section.c0;
+            s0.center = objs[k].center + objs[k].local_to_world(section.c0);
             s0.rot = objs[k].rot;
-            s1.center = objs[k].center + section.c1;
+            s1.center = objs[k].center + objs[k].local_to_world(section.c1);
             s1.rot = objs[k].rot;
+
+            s0.local_to_world();
+            s1.local_to_world();
         }
     }
 
@@ -674,22 +679,26 @@ int main() {
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, 0.0}, {-5.0, 0.7}, {-5.5, 0.8}, {-5.5, 1.2}, {-5.0, 1.3},
 //                                                 {-5.0, 2.0}, {-6.5, 2.0}, {-6.5, 1.3}, {-6.0, 1.2}, {-6.0, 0.8},
 //                                                 {-6.5, 0.7}, {-6.5, 0.0}}, 1.0));
-//    objs[0].enable_fracture = true;
-//    objs[0].convex_decompose();
-//    objs[0].stress_toleration = 1000;
-//
-    for (int i = 0; i < 6; i++) {
-        objs.push_back(RigidPoly<Scalar, Vector>({{i - 7.5, 0.0}, {i - 7.5, 4.0}, {i - 8.0, 4.0}, {i - 8.0, 0.0}}, 4.0));
-        objs[i].enable_fracture = true;
-        objs[i].stress_toleration = 18000;
-    }
+    objs.push_back(RigidPoly<Scalar, Vector>({{-4.0, -1.0}, {-2, 1.0}, {-2, 3.8}, {-4, 5.8}, {-6.8, 5.8},
+                                                 {-8.8, 3.8}, {-8.8, 1.0}, {-6.8, -1.0}, {-5.8, -0.8}, {-6.6, -0.8},
+                                                 {-8.6, 1.0}, {-8.6, 3.8}, {-6.6, 5.6}, {-4.2, 5.6},
+                                                 {-2.2, 3.8}, {-2.2, 1.0}, {-4.1, -0.888}}, 1.0));
+    objs[0].enable_fracture = true;
+    objs[0].convex_decompose();
+    objs[0].stress_toleration = 10;
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.8}, {6.0, 1.0}, {6.0, 2.6}}, 4.0));
-    objs[6].enable_fracture = false;
-    objs[6].m = {-70, 14};
+//    for (int i = 0; i < 6; i++) {
+//        objs.push_back(RigidPoly<Scalar, Vector>({{i - 7.5, 0.0}, {i - 7.5, 4.0}, {i - 8.0, 4.0}, {i - 8.0, 0.0}}, 4.0));
+//        objs[i].enable_fracture = true;
+//        objs[i].stress_toleration = 18000;
+//    }
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{-8.5, 4.0}, {-2.0, 4.0}, {-5.25, 4.5}}, 1.0));
-    objs[7].enable_fracture = false;
+    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.6}, {6.0, 0.8}, {6.0, 2.4}}, 4.0));
+    objs[1].enable_fracture = false;
+    objs[1].m = {-110, 0};
+
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-8.5, 4.0}, {-2.0, 4.0}, {-5.25, 4.5}}, 1.0));
+//    objs[7].enable_fracture = false;
 
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, -4.0}, {-5.0, -2.0}, {-6.5, -2.0}, {-6.5, -4.0}}, 1.0));
 //    objs[2].enable_fracture = true;
@@ -699,8 +708,14 @@ int main() {
 //    objs[3].enable_fracture = false;
 //    objs[3].m = {-15, 0};
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{-10.5, 0.0}, {-10.5, -0.5}, {10.5, -0.5}, {10.5, 0.0}}, 1.0));
-    objs[8].set_fixed();
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-10.5, 0.0}, {-10.5, -0.5}, {10.5, -0.5}, {10.5, 0.0}}, 1.0));
+//    objs[8].set_fixed();
+
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-7.5, 0.3}, {-7.5, 0.0}, {-6.5, 0.0}, {-6.5, 0.3}}, 1.0));
+//    objs[2].set_fixed();
+
+    objs.push_back(RigidPoly<Scalar, Vector>({{-10, -5.0}, {-9.5, -5.0}, {-9.5, 11.0}, {-10, 11.0}}, 1.0));
+    objs[2].set_fixed();
 
     for (auto& obj : objs) {
         if (obj.enable_fracture) {
@@ -713,7 +728,9 @@ int main() {
     Heatmap color_map;
     
     glMatrixMode(GL_PROJECTION);
-    glScalef(0.05, 0.05, 1.0);
+    glScalef(0.06, 0.06, 1.0);
+
+    uint8_t *pixels = new uint8_t[1024 * 1024 * 3];
 
     unsigned int frame_count = 0;
 
@@ -746,7 +763,6 @@ int main() {
         std::cout << "process_impulse()"<< std::endl;
 #endif
         process_impulse(objs, impulse);
-
 #ifndef NDEBUG
         std::cout << "find_resting()"<< std::endl;
 #endif
@@ -807,7 +823,7 @@ int main() {
             mon.clear();
 
             for (int i = 0; i < objs.size(); i++) {
-                auto c = objs[i];
+                auto& c = objs[i];
                 Color color;
                 color_map.getColorAtValue(static_cast<float>(i) / static_cast<float>(objs.size()), color);
                 if (objs[i].decomposed) {
@@ -818,6 +834,59 @@ int main() {
                     mon.drawPoly(objs[i].world, 1, color);
                 }
             }
+
+            // write to png
+//            glReadPixels(0, 0, 1024, 1024, GL_RGB, GL_UNSIGNED_BYTE, (GLvoid *) pixels);
+//            for (int j = 0; j * 2 < 1024; ++j) {
+//                int x = j * 1024 * 3;
+//                int y = (1024 - 1 - j) * 1024 * 3;
+//                for (int i = 1024 * 3; i > 0; --i) {
+//                    uint8_t tmp = pixels[x];
+//                    pixels[x] = pixels[y];
+//                    pixels[y] = tmp;
+//                    ++x;
+//                    ++y;
+//                }
+//            }
+//            png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+//            png_infop info = png_create_info_struct(png);
+//            if (!info) {
+//                std::cout << "unable to create write struct" << std::endl;
+//                png_destroy_write_struct(&png, &info);
+//                return -1;
+//            }
+//            std::string s = "output/Frame" + std::to_string(frame_count) + ".png";
+//            FILE *fp = fopen(s.c_str(), "wb");
+//            if (!fp) {
+//                std::cout << "unable to open output folder" << std::endl;
+//                png_destroy_write_struct(&png, &info);
+//                return -1;
+//            }
+//
+//            png_init_io(png, fp);
+//            png_set_IHDR(png, info, 1024, 1024, 8 , PNG_COLOR_TYPE_RGB, PNG_INTERLACE_NONE,
+//                         PNG_COMPRESSION_TYPE_BASE, PNG_FILTER_TYPE_BASE);
+//            png_colorp palette = (png_colorp)png_malloc(png, PNG_MAX_PALETTE_LENGTH * sizeof(png_color));
+//            if (!palette) {
+//                fclose(fp);
+//                png_destroy_write_struct(&png, &info);
+//                return -1;
+//            }
+//            png_set_PLTE(png, info, palette, PNG_MAX_PALETTE_LENGTH);
+//            png_write_info(png, info);
+//            png_set_packing(png);
+//
+//            png_bytepp rows = (png_bytepp)png_malloc(png, 1024 * sizeof(png_bytep));
+//            for (int i = 0; i < 1024; ++i)
+//                rows[i] = (png_bytep)(pixels + (1024 - i - 1) * 1024 * 3);
+//
+//            png_write_image(png, rows);
+//            png_write_end(png, info);
+//            png_free(png, palette);
+//            png_destroy_write_struct(&png, &info);
+//
+//            fclose(fp);
+//            delete[] rows;
 
             mon.refresh();
         }
