@@ -71,3 +71,28 @@ target_link_libraries(RigidFracture2DDemo
     # Eigen3::Eigen
 )
 
+add_executable(Transform3DDemo
+    ${GLAD_SRCS}
+    ${FRAPS3D_SRCS}
+    ${FRAPS3D_HDRS}
+    demo3DTransform.cpp
+)
+
+target_compile_options(Transform3DDemo 
+                       PUBLIC -DFRAPS_USE_EIGEN)
+
+set_target_properties(Transform3DDemo PROPERTIES
+                      VERIFY_INTERFACE_HEADER_SETS TRUE
+)
+
+target_link_libraries(Transform3DDemo
+    OpenGL::GL
+    glfw
+    # ${MKL_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    ${PNG_LIBRARY}
+    # OpenMP::OpenMP_CXX
+    # Eigen3::Eigen
+)
+
+

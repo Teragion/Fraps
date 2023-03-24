@@ -1,10 +1,7 @@
 #ifndef COLLISION_PARAMETERS_H
 #define COLLISION_PARAMETERS_H
 
-#include "vec.h"
-
-using Scalar = double;
-using Vector = Vec2d;
+#include "common_defs.h"
 
 const Scalar eps = 0.10; // coefficient of restitution
 const Vector g = {0.0, 0.0}; // gravity

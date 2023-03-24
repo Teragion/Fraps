@@ -100,6 +100,37 @@ endforeach()
 file(GLOB_RECURSE FRAPS_SRCS src/*.cpp)
 file(GLOB_RECURSE FRAPS_HDRS include/*.h)
 
+set(FRAPS3D_HDRS
+  include/util/heatmap.h
+  include/util/monitor.h
+  
+  include/array1.h
+  include/array2_utils.h
+  include/array2.h
+  include/circle.h
+  include/collision_parameters.h
+  include/contact.h
+  include/epa.h
+  include/force.h
+  include/fracture.h
+  include/geometry.h
+  include/logger.h
+  include/mat.h
+  include/math_kernel.h
+  include/obj_reader.h
+  include/rigidpoly3D.h
+  include/util.h
+  include/vec.h
+)
+
+set(FRAPS3D_SRCS
+  src/util/heatmap.cpp
+  src/util/monitor.cpp
+)
+
+list(TRANSFORM FRAPS3D_SRCS PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
+list(TRANSFORM FRAPS3D_HDRS PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
+
 # Testing
 set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 include(CTest)
