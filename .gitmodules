@@ -4,3 +4,6 @@
 [submodule "imported/eigen"]
 	path = imported/eigen
 	url = https://gitlab.com/libeigen/eigen.git
+[submodule "imported/triangle"]
+	path = imported/triangle
+	url = https://github.com/libigl/triangle.git
