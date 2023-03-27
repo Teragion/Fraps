@@ -135,6 +135,14 @@ list(TRANSFORM FRAPS3D_HDRS PREPEND ${CMAKE_CURRENT_SOURCE_DIR}/)
 set_property(GLOBAL PROPERTY CTEST_TARGETS_ADDED 1)
 include(CTest)
 add_subdirectory(imported/googletest)
+
+# Triangle
+option(BUILD_EXECUTABLE "Build triangle executable" OFF)
+option(BUILD_LIBRARY    "Build libtriangle library" ON)
+add_subdirectory(imported/triangle)
+include_directories(imported/triangle)
+
 add_subdirectory(tests)
 
 add_subdirectory(demo)
+add_subdirectory(tool)
