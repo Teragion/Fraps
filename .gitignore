@@ -8,6 +8,8 @@ cmake-build-debug/
 cmake-build-release/
 cmake-build-relwithdebinfo/
 
+imported/rheolef-7.2
+
 # Prerequisites
 *.d
 

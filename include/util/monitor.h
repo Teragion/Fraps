@@ -124,6 +124,10 @@ void Monitor::drawTri(const Vec& v0, const Vec& v1, const Vec& v2, const Color& 
     ::glVertex2d(v1(0), v1(1));
     ::glVertex2d(v2(0), v2(1));
     ::glEnd();
+
+    drawLine(v0, v1, 1, black);
+    drawLine(v1, v2, 1, black);
+    drawLine(v0, v2, 1, black);
 }
 
 #ifdef FRAPS_3D

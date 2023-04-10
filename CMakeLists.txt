@@ -50,6 +50,8 @@ elseif("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   add_compile_definitions(FLOP_DEBUG_INFO=1)
 endif()
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
 # OpenMP
 find_package(OpenMP REQUIRED)
 
@@ -65,6 +67,9 @@ find_package(Eigen3 REQUIRED)
 
 # OpenGL
 find_package(OpenGL REQUIRED)
+
+# libMesh
+find_package(LIBMESH REQUIRED)
 
 # Intel MKL
 # Unofficial

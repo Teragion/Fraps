@@ -20,10 +20,12 @@ public:
 
         for (int i = 0; i < points.size(); i++) {
             int j = (i + 1) % points.size();
-            out << i << " " << j << "\n";
+            out << i + 1 << " " << j + 1 << "\n";
         }
 
         out << "0\n"; // holes
+
+        out.close();
     }
 };
 

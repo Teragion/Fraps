@@ -96,3 +96,4 @@ target_link_libraries(Transform3DDemo
 )
 
 add_subdirectory(demo2DFracture)
+add_subdirectory(demo2DFEM)

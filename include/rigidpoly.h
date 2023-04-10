@@ -21,8 +21,10 @@ template<typename Scalar, typename Vector>
 struct RigidPoly {
     typedef Vec3i tri;
     std::vector<Vector> verts;
+    std::vector<Vector> inner_verts;
     std::vector<tri> triangles;
 
+    bool triangulated = false;
     bool decomposed = false;
     typedef std::vector<Vector> Shape;
     std::vector<Shape> convex_polys;
@@ -60,6 +62,7 @@ struct RigidPoly {
     Vector F; // force
     Scalar torque; // torque (perpendicular to the plane)
     std::vector<Vector> world; // verts in world coordinate
+    std::vector<Vector> inner_world; // inner_verts in world coordinate
 
     // fracture related varibles
     std::vector<Section> sections;
@@ -82,21 +85,16 @@ struct RigidPoly {
     bool deleted = false;
 
     RigidPoly() 
-        : verts(), fixed(false) {}
+        : verts(), center({0.0, 0.0}), rot(0.0), m(0.0), L(0.0), density(1.0), fixed(false) {}
     
-    RigidPoly(std::initializer_list<Vector> vertices, Scalar density, bool init_world = true)
+    RigidPoly(std::initializer_list<Vector> vertices, Scalar density)
         : verts(vertices), center({0.0, 0.0}), rot(0.0), m(0.0), L(0.0), density(density), fixed(false), enable_fracture(false) {
-        if (init_world) {
-            for (int i = 0; i < verts.size(); i++) {
-                world.push_back(verts[i]);
-            }
-        }
-//        triangulate();
-//        correct_center();
-        init_inertia();
+        init();
     }
 
     contact_type detect_collision(RigidPoly& other);
+
+    void init();
 
     void triangulate();
     void decompose(std::vector<Vector>& poly);
@@ -225,6 +223,16 @@ RigidPoly<Scalar, Vector>::detect_collision(RigidPoly<Scalar, Vector>& other) {
 }
 
 template<typename Scalar, typename Vector>
+void RigidPoly<Scalar, Vector>::init() {
+    for (int i = 0; i < verts.size(); i++) {
+        world.push_back(verts[i]);
+    }
+//        triangulate();
+//        correct_center();
+    init_inertia();
+}
+
+template<typename Scalar, typename Vector>
 static inline Scalar triangle_area(const Vector& p0, const Vector& p1, const Vector& p2) {
     return static_cast<Scalar>(0.5) * (std::abs(p0(0) * (p1(1) - p2(1)) 
                                               + p1(0) * (p2(1) - p0(1)) 
@@ -254,7 +262,7 @@ inline bool is_reflex(std::vector<Vector> &poly, int i) {
     return right(at(poly, i - 1), at(poly, i), at(poly, i + 1));
 }
 
-void makeCCW(std::vector<Vector> &poly) {
+inline void makeCCW(std::vector<Vector> &poly) {
     int br = 0;
 
     // find bottom right point
@@ -289,6 +297,7 @@ inline Vector intersection(const Vector &p1, const Vector &p2, const Vector &q1,
 
 /**
  * See https://mpen.ca/406/bayazit
+ * WARNING: Seems to have bugs
  * @tparam Scalar
  * @tparam Vector
  * @param poly
@@ -764,6 +773,8 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
                 fracture_pos = idx;
             }
         }
+
+        s.ratio = stress / stress_toleration;
     }
 #ifndef NDEBUG
     std::cout << "max_stress = " << max_stress << std::endl;
@@ -1032,6 +1043,19 @@ void RigidPoly<Scalar, Vector>::local_to_world() {
 
                 p += center;
             }
+        }
+    }
+
+    if (triangulated) {
+        for (int i = 0; i < inner_verts.size(); i++) {
+            inner_world[i] = inner_verts[i];
+            t1 = a11 * inner_world[i](0) + a12 * inner_world[i](1);
+            t2 = a21 * inner_world[i](0) + a22 * inner_world[i](1);
+
+            inner_world[i](0) = t1;
+            inner_world[i](1) = t2;
+
+            inner_world[i] += center;
         }
     }
 }

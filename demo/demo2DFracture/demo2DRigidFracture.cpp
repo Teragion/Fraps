@@ -4,7 +4,9 @@
 #include "util/monitor.h"
 
 #include "collision_parameters.h"
+#include "poly_reader.h"
 #include "rigidpoly.h"
+#include "triangulate.h"
 #include "vec.h"
 
 #include <glad/glad.h>
@@ -664,6 +666,9 @@ void detach(std::vector<RigidPoly<Scalar, Vector> >& objs) {
 
             s0.local_to_world();
             s1.local_to_world();
+
+            // s0.enable_fracture = false;
+            // s1.enable_fracture = false;
         }
     }
 
@@ -679,12 +684,15 @@ int main() {
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-5.0, 0.0}, {-5.0, 0.7}, {-5.5, 0.8}, {-5.5, 1.2}, {-5.0, 1.3},
 //                                                 {-5.0, 2.0}, {-6.5, 2.0}, {-6.5, 1.3}, {-6.0, 1.2}, {-6.0, 0.8},
 //                                                 {-6.5, 0.7}, {-6.5, 0.0}}, 1.0));
-    objs.push_back(RigidPoly<Scalar, Vector>({{-4.0, -1.0}, {-2, 1.0}, {-2, 3.8}, {-4, 5.8}, {-6.8, 5.8},
-                                                 {-8.8, 3.8}, {-8.8, 1.0}, {-6.8, -1.0}, {-5.8, -0.8}, {-6.6, -0.8},
-                                                 {-8.6, 1.0}, {-8.6, 3.8}, {-6.6, 5.6}, {-4.2, 5.6},
-                                                 {-2.2, 3.8}, {-2.2, 1.0}, {-4.1, -0.888}}, 1.0));
+    // objs.push_back(RigidPoly<Scalar, Vector>({{-4.0, -1.0}, {-2, 1.0}, {-2, 3.8}, {-4, 5.8}, {-6.8, 5.8},
+    //                                              {-8.8, 3.8}, {-8.8, 1.0}, {-6.8, -1.0}, {-5.8, -0.8}, {-6.6, -0.8},
+    //                                              {-8.6, 1.0}, {-8.6, 3.8}, {-6.6, 5.6}, {-4.2, 5.6},
+    //                                              {-2.2, 3.8}, {-2.2, 1.0}, {-4.1, -0.888}}, 1.0));
+
+    objs.push_back(PolyReader::readSolid("/Users/teragion/Models/out.poly"));
     objs[0].enable_fracture = true;
-    objs[0].convex_decompose();
+    // objs[0].convex_decompose();
+    Triangulate::triangulateSolid(objs[0]);
     objs[0].stress_toleration = 10;
 
 //    for (int i = 0; i < 6; i++) {
@@ -693,9 +701,9 @@ int main() {
 //        objs[i].stress_toleration = 18000;
 //    }
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 1.6}, {6.0, 0.8}, {6.0, 2.4}}, 4.0));
+    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 0.6}, {4.5, 0.8}, {4.2, 0.7}}, 2.0));
     objs[1].enable_fracture = false;
-    objs[1].m = {-110, 0};
+    objs[1].m = {-5, 0};
 
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-8.5, 4.0}, {-2.0, 4.0}, {-5.25, 4.5}}, 1.0));
 //    objs[7].enable_fracture = false;
@@ -714,8 +722,8 @@ int main() {
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-7.5, 0.3}, {-7.5, 0.0}, {-6.5, 0.0}, {-6.5, 0.3}}, 1.0));
 //    objs[2].set_fixed();
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{-10, -5.0}, {-9.5, -5.0}, {-9.5, 11.0}, {-10, 11.0}}, 1.0));
-    objs[2].set_fixed();
+    // objs.push_back(RigidPoly<Scalar, Vector>({{-10, -5.0}, {-9.5, -5.0}, {-9.5, 11.0}, {-10, 11.0}}, 1.0));
+    // objs[2].set_fixed();
 
     for (auto& obj : objs) {
         if (obj.enable_fracture) {
@@ -728,7 +736,7 @@ int main() {
     Heatmap color_map;
     
     glMatrixMode(GL_PROJECTION);
-    glScalef(0.06, 0.06, 1.0);
+    glScalef(1.0, 1.0, 1.0);
 
     uint8_t *pixels = new uint8_t[1024 * 1024 * 3];
 
@@ -738,50 +746,56 @@ int main() {
     double lframe = t0;
     double t = 0.0;
     Scalar suggest;
+    
+    bool stop_flag = false;
 
     while (!mon.shouldClose) {
-//        std::cout << "t: " << t << std::endl;
         const double t1 = glfwGetTime();
-//        std::cout << "t1: " << t1 << std::endl;
-        if (t > t1) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(std::floor((t - t1) * 1000))));
+        if (!stop_flag) {
+    //        std::cout << "t: " << t << std::endl;
+    //        std::cout << "t1: " << t1 << std::endl;
+            if (t > t1) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(std::floor((t - t1) * 1000))));
+            }
+
+            clear_variables(objs);
+            update_derived(objs);
+            update_last(objs);
+            apply_gravity(objs);
+
+            std::vector<contact_type> resting;
+            std::vector<contact_type> impulse;
+#ifndef NDEBUG
+            std::cout << "detect_contact()"<< std::endl;
+#endif
+            detect_contact(objs, impulse, resting, suggest);
+
+#ifndef NDEBUG
+            std::cout << "process_impulse()"<< std::endl;
+#endif
+            process_impulse(objs, impulse);
+#ifndef NDEBUG
+            std::cout << "find_resting()"<< std::endl;
+#endif
+            update_derived(objs);
+            find_resting(objs, impulse, resting);
+
+#ifndef NDEBUG
+            std::cout << "solve_contact_forces()"<< std::endl;
+#endif
+            solve_contact_forces(objs, resting);
+            update_derived(objs);
+
+            if (check_fracture(objs)) {
+                stop_flag = true;
+                continue;
+                rewind(objs);
+                detach(objs);
+                continue;
+            }
+
+            ode(objs, dt);
         }
-
-        clear_variables(objs);
-        update_derived(objs);
-        update_last(objs);
-        apply_gravity(objs);
-
-        std::vector<contact_type> resting;
-        std::vector<contact_type> impulse;
-#ifndef NDEBUG
-        std::cout << "detect_contact()"<< std::endl;
-#endif
-        detect_contact(objs, impulse, resting, suggest);
-
-#ifndef NDEBUG
-        std::cout << "process_impulse()"<< std::endl;
-#endif
-        process_impulse(objs, impulse);
-#ifndef NDEBUG
-        std::cout << "find_resting()"<< std::endl;
-#endif
-        update_derived(objs);
-        find_resting(objs, impulse, resting);
-
-#ifndef NDEBUG
-        std::cout << "solve_contact_forces()"<< std::endl;
-#endif
-        solve_contact_forces(objs, resting);
-        update_derived(objs);
-
-        if (check_fracture(objs)) {
-            rewind(objs);
-            detach(objs);
-            continue;
-        }
-
-        ode(objs, dt);
         t += dt;
 #ifdef ADAPTIVE_STEP
         // fine tune the step size
@@ -826,13 +840,33 @@ int main() {
                 auto& c = objs[i];
                 Color color;
                 color_map.getColorAtValue(static_cast<float>(i) / static_cast<float>(objs.size()), color);
-                if (objs[i].decomposed) {
-                    for (int j = 0; j < objs[i].convex_polys_world.size(); j++) {
-                        mon.drawPoly(objs[i].convex_polys_world[j], 1, color);
+                if (objs[i].triangulated) {
+                    // for (int j = 0; j < objs[i].convex_polys_world.size(); j++) {
+                    //     mon.drawPoly(objs[i].convex_polys_world[j], 1, white);
+                    // }
+
+                    for (int j = 0; j < objs[i].triangles.size(); j++) {
+                        const auto& tri = objs[i].triangles[j];
+                        mon.drawTri(objs[i].inner_world[tri(0)], 
+                                    objs[i].inner_world[tri(1)],
+                                    objs[i].inner_world[tri(2)], white);
                     }
                 } else {
                     mon.drawPoly(objs[i].world, 1, color);
                 }
+            }
+
+            Scalar max_r;
+            for (int i = 0; i < objs[0].sections.size(); i++) {
+                if ((objs[0].sections[i].ratio) > max_r) {
+                    max_r = objs[0].sections[i].ratio;
+                }
+            }
+
+            for (int i = 0; i < objs[0].sections.size(); i++) {
+                Color color;
+                color_map.getColorAtValue(static_cast<float>(objs[0].sections[i].ratio) / max_r, color);
+                // mon.drawLine(objs[0].center + objs[0].sections[i].j0.p, objs[0].center + objs[0].sections[i].j1.p, 1, color);
             }
 
             // write to png

@@ -113,9 +113,9 @@ bool construct_cross_section(const Intersection& i0, const Intersection& i1, con
 std::vector<Section> find_cross_sections(const std::vector<Vector>& shape) {
     std::vector<Section> ret;
     const int num_directions = 12;
-    const int num_offsets = 6;
-    const double left = -2.0;
-    const double right = 2.0;
+    const int num_offsets = 15;
+    const double left = -1.0;
+    const double right = 1.0;
 
     const double length_threshold = 0.01;
 

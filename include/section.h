@@ -50,6 +50,8 @@ struct Section {
     Scalar w0_inv{};
     Scalar w1;
     Scalar w1_inv{};
+
+    Scalar ratio;
 };
 
 /**
