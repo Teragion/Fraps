@@ -22,6 +22,7 @@ struct RigidPoly {
     typedef Vec3i tri;
     std::vector<Vector> verts;
     std::vector<Vector> inner_verts;
+    std::vector<int> bound_marks;
     std::vector<tri> triangles;
 
     bool triangulated = false;

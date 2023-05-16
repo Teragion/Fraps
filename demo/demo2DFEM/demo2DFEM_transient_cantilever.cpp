@@ -1,12 +1,46 @@
-// C++ include files that we need
-#include <math.h>
+// The libMesh Finite Element Library.
+// Copyright (C) 2002-2023 Benjamin S. Kirk, John W. Peterson, Roy H. Stogner
 
-#include <algorithm>
-#include <fstream>
-#include <iostream>
-#include <string>
+// This library is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 2.1 of the License, or (at your option) any later version.
 
-// libMesh includes
+// This library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+
+// You should have received a copy of the GNU Lesser General Public
+// License along with this library; if not, write to the Free Software
+// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+// <h1>FEMSystem Example 3 - Unsteady Linear Elasticity with
+// FEMSystem</h1>
+// \author Paul Bauman
+// \date 2015
+//
+// This example shows how to solve the three-dimensional transient
+// linear elasticity equations using the DifferentiableSystem class framework.
+// This is just Systems of Equations Example 6 recast.
+
+// C++ includes
+#include <iomanip>
+#include <memory>
+
+// Basic include files
+#include "libmesh/enum_solver_package.h"
+#include "libmesh/enum_solver_type.h"
+#include "libmesh/equation_systems.h"
+#include "libmesh/error_vector.h"
+#include "libmesh/exodusII_io.h"
+#include "libmesh/getpot.h"
+#include "libmesh/kelly_error_estimator.h"
+#include "libmesh/mesh.h"
+#include "libmesh/mesh_generation.h"
+#include "libmesh/numeric_vector.h"
+
+// The systems and solvers we may use
 #include "elasticity_system.h"
 #include "libmesh/boundary_info.h"
 #include "libmesh/dense_matrix.h"
@@ -18,150 +52,45 @@
 #include "libmesh/dof_map.h"
 #include "libmesh/eigen_sparse_linear_solver.h"
 #include "libmesh/elem.h"
-#include "libmesh/enum_fe_family.h"
-#include "libmesh/enum_solver_package.h"
-#include "libmesh/enum_solver_type.h"
-#include "libmesh/equation_systems.h"
 #include "libmesh/euler2_solver.h"
 #include "libmesh/euler_solver.h"
-#include "libmesh/exodusII_io.h"
-#include "libmesh/fe.h"
-#include "libmesh/getpot.h"
-#include "libmesh/gnuplot_io.h"
 #include "libmesh/libmesh.h"
 #include "libmesh/linear_implicit_system.h"
-#include "libmesh/mesh.h"
 #include "libmesh/mesh_function.h"
-#include "libmesh/mesh_generation.h"
 #include "libmesh/newmark_solver.h"
 #include "libmesh/newton_solver.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/perf_log.h"
+#include "libmesh/quadrature.h"
 #include "libmesh/quadrature_gauss.h"
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/steady_solver.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/zero_function.h"
-#include "poly_reader.h"
-#include "rigidpoly.h"
-#include "triangulate.h"
+
+#define x_scaling 1.3
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
 
-// Matrix and right-hand side assemble
-void assemble_elasticity(EquationSystems& es, const std::string& system_name);
-
-// Define the elasticity tensor, which is a fourth-order tensor
-// i.e. it has four indices i, j, k, l
-Real eval_elasticity_tensor(unsigned int i, unsigned int j, unsigned int k, unsigned int l);
-
 void compute_stresses(EquationSystems& es);
 
-void write_xda(const RigidPoly<Scalar, Vector>& poly) {
-    std::string path = "/Users/teragion/Models/out.xda";
-
-    std::ofstream out;
-    out.open(path, std::ios::out);
-
-    // metadata
-    out << "libMesh-0.7.0+\n";
-    out << poly.triangles.size() << " # Num. Elements\n";
-    out << poly.inner_verts.size() << " # Num. Nodes\n";
-
-    out << "."
-        << "# boundary condition specification file\n";
-    out << "n/a"
-        << "# subdomain id specification file\n";
-    out << "n/a"
-        << "# processor id specification file\n";
-    out << "n/a"
-        << "# p-level specification file\n";
-
-    out << poly.triangles.size() << " # n_elem at level 0, [ type (n0 ... nN-1) ]\n";
-    for (int i = 0; i < poly.triangles.size(); i++) {
-        out << 3 << " " << poly.triangles[i](0) << " " << poly.triangles[i](1) << " " << poly.triangles[i](2) << "\n";
-    }
-
-    for (int i = 0; i < poly.inner_verts.size(); i++) {
-        out << poly.inner_verts[i](0) << " " << poly.inner_verts[i](1) << " " << 0.0 << "\n";
-    }
-
-    int bound_conds = 0;
-    for (int i = 0; i < poly.triangles.size(); i++) {
-        for (int j = 0; j < 3; j++) {
-            int v = poly.triangles[i](j);
-            int w = (poly.triangles[i](j) + 1) % 3;
-            if (poly.inner_verts[v](1) < -0.62 && poly.inner_verts[w](1) < -0.62) {
-                bound_conds += 1;
-            }
-
-            if (dist(poly.inner_world[v], {0.3035, 0.4705}) < 0.05) {
-                if (poly.bound_marks[v] && poly.bound_marks[w]) {
-                    bound_conds += 1;
-                }
-            }
-        }
-    }
-
-    out << bound_conds << " # Num. Boundary Conds.\n";
-    for (int i = 0; i < poly.triangles.size(); i++) {
-        for (int j = 0; j < 3; j++) {
-            int v = poly.triangles[i](j);
-            int w = (poly.triangles[i](j) + 1) % 3;
-            if (poly.inner_verts[v](1) < -0.62 && poly.inner_verts[w](1) < -0.62) {
-                out << i << " " << j << " 40\n";
-            }
-
-            if (dist(poly.inner_world[v], {0.3035, 0.4705}) < 0.05) {
-                if (poly.bound_marks[v] && poly.bound_marks[w]) {
-                    out << i << " " << j << " 30\n";
-                }
-            }
-        }
-    }
-
-    out.close();
-}
-
-// Begin the main program.
+// The main program.
 int main(int argc, char** argv) {
-    RigidPoly obj = PolyReader::readSolid("/Users/teragion/Models/out.poly");
-    Triangulate::triangulateSolid(obj);
-    write_xda(obj);
-
-    // Initialize libMesh and any dependent libraries
+    // Initialize libMesh.
     LibMeshInit init(argc, argv);
 
     // This example requires a linear solver package.
     libmesh_example_requires(libMesh::default_solver_package() != INVALID_SOLVER_PACKAGE, "--enable-petsc, --enable-trilinos, or --enable-eigen");
 
-    // Initialize the cantilever mesh
-    const unsigned int dim = 2;
-
-    // Skip this 2D example if libMesh was compiled as 1D-only.
-    libmesh_example_requires(dim <= LIBMESH_DIM, "2D support");
+    // This example requires 3D calculations
+    libmesh_example_requires(LIBMESH_DIM > 2, "3D support");
 
     // We use Dirichlet boundary conditions here
 #ifndef LIBMESH_ENABLE_DIRICHLET
     libmesh_example_requires(false, "--enable-dirichlet");
 #endif
 
-    // Create a 2D mesh distributed across the default MPI communicator.
-    Mesh mesh(init.comm(), dim);
-
-    // 'MeshTool's::Generation::build_square(mesh, nx, ny, 0., 1., 0., 0.2, QUAD9);
-    mesh.read("/Users/teragion/Models/out.xda");
-
-    // Print information about the mesh to the screen.
-    mesh.print_info();
-
-    // Create an equation systems object.
-    EquationSystems equation_systems(mesh);
-
-    // Declare the system and its variables.
-    // Create a system named "Elasticity"
-    // Declare the system and its variables.
     // Parse the input file
     GetPot infile("FEM.in");
 
@@ -176,10 +105,75 @@ int main(int argc, char** argv) {
     const unsigned int write_interval = infile("write_interval", 1);
 #endif
 
+    // Initialize the cantilever mesh
+    const unsigned int dim = 3;
+
+    // Make sure libMesh was compiled for 3D
+    libmesh_example_requires(dim == LIBMESH_DIM, "3D support");
+
+    const unsigned int nx = infile("nx", 32);
+    const unsigned int ny = infile("ny", 8);
+    const unsigned int nz = infile("nz", 4);
+
+    // Create a 3D mesh distributed across the default MPI communicator.
+    Mesh mesh(init.comm(), dim);
+    MeshTools::Generation::build_cube(mesh, nx, ny, nz, 0., 1. * x_scaling, 0., 0.3, 0., 0.1, HEX8);
+
+    // Print information about the mesh to the screen.
+    mesh.print_info(libMesh::out, /* verbosity = */ 2);
+
+    // Let's add some node and edge boundary conditions.
+    // Each processor should know about each boundary condition it can
+    // see, so we loop over all elements, not just local elements.
+    for (const auto& elem : mesh.element_ptr_range()) {
+        unsigned int side_max_x = 0, side_min_y = 0, side_max_y = 0, side_max_z = 0;
+        bool found_side_max_x = false, found_side_max_y = false, found_side_min_y = false, found_side_max_z = false;
+        for (auto side : elem->side_index_range()) {
+            if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_max_x)) {
+                side_max_x = side;
+                found_side_max_x = true;
+            }
+
+            if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_min_y)) {
+                side_min_y = side;
+                found_side_min_y = true;
+            }
+
+            if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_max_y)) {
+                side_max_y = side;
+                found_side_max_y = true;
+            }
+
+            if (mesh.get_boundary_info().has_boundary_id(elem, side, boundary_id_max_z)) {
+                side_max_z = side;
+                found_side_max_z = true;
+            }
+        }
+
+        // If elem has sides on boundaries
+        // BOUNDARY_ID_MAX_X, BOUNDARY_ID_MAX_Y, BOUNDARY_ID_MAX_Z
+        // then let's set a node boundary condition
+        if (found_side_max_x && found_side_max_y && found_side_max_z)
+            for (auto n : elem->node_index_range())
+                if (elem->is_node_on_side(n, side_max_x) && elem->is_node_on_side(n, side_max_y) && elem->is_node_on_side(n, side_max_z))
+                    mesh.get_boundary_info().add_node(elem->node_ptr(n), node_boundary_id);
+
+        // If elem has sides on boundaries
+        // BOUNDARY_ID_MAX_X and BOUNDARY_ID_MIN_Y
+        // then let's set an edge boundary condition
+        if (found_side_max_x && found_side_min_y)
+            for (auto e : elem->edge_index_range())
+                if (elem->is_edge_on_side(e, side_max_x) && elem->is_edge_on_side(e, side_min_y)) mesh.get_boundary_info().add_edge(elem, e, edge_boundary_id);
+    }
+
+    // Create an equation systems object.
+    EquationSystems equation_systems(mesh);
+
+    // Declare the system and its variables.
     ElasticitySystem& system = equation_systems.add_system<ElasticitySystem>("Linear Elasticity");
 
     // Solve this as a time-dependent or steady system
-    std::string time_solver = infile("time_solver", "newmark");
+    std::string time_solver = infile("time_solver", "euler");
 
     ExplicitSystem* v_system;
     ExplicitSystem* a_system;
@@ -271,6 +265,7 @@ int main(int argc, char** argv) {
         *(v_system->solution) = system.get_vector("_old_solution_rate");
         *(a_system->solution) = system.get_vector("_old_solution_accel");
     }
+    compute_stresses(equation_systems);
 
 #ifdef LIBMESH_HAVE_EXODUS_API
     // Output initial state
@@ -279,7 +274,6 @@ int main(int argc, char** argv) {
 
         // We write the file in the ExodusII format.
         file_name << std::string("out.") + time_solver + std::string(".e-s.") << std::setw(3) << std::setfill('0') << std::right << 0;
-        compute_stresses(equation_systems);
 
         ExodusII_IO(mesh).write_timestep(file_name.str(), equation_systems,
                                          1,  // This number indicates how many time steps
@@ -327,169 +321,6 @@ int main(int argc, char** argv) {
     return 0;
 }
 
-void assemble_elasticity(EquationSystems& es, const std::string& libmesh_dbg_var(system_name)) {
-    libmesh_assert_equal_to(system_name, "Elasticity");
-
-    const MeshBase& mesh = es.get_mesh();
-
-    const unsigned int dim = mesh.mesh_dimension();
-
-    LinearImplicitSystem& system = es.get_system<LinearImplicitSystem>("Elasticity");
-
-    const unsigned int u_var = system.variable_number("u");
-    const unsigned int v_var = system.variable_number("v");
-
-    const DofMap& dof_map = system.get_dof_map();
-    FEType fe_type = dof_map.variable_type(0);
-    std::unique_ptr<FEBase> fe(FEBase::build(dim, fe_type));
-    QGauss qrule(dim, fe_type.default_quadrature_order());
-    fe->attach_quadrature_rule(&qrule);
-
-    std::unique_ptr<FEBase> fe_face(FEBase::build(dim, fe_type));
-    QGauss qface(dim - 1, fe_type.default_quadrature_order());
-    fe_face->attach_quadrature_rule(&qface);
-
-    const std::vector<Real>& JxW = fe->get_JxW();
-    const std::vector<std::vector<RealGradient>>& dphi = fe->get_dphi();
-
-    DenseMatrix<Number> Ke;
-    DenseVector<Number> Fe;
-
-    DenseSubMatrix<Number> Kuu(Ke), Kuv(Ke), Kvu(Ke), Kvv(Ke);
-
-    DenseSubVector<Number> Fu(Fe), Fv(Fe);
-
-    std::vector<dof_id_type> dof_indices;
-    std::vector<dof_id_type> dof_indices_u;
-    std::vector<dof_id_type> dof_indices_v;
-
-    SparseMatrix<Number>& matrix = system.get_system_matrix();
-
-    for (const auto& elem : mesh.active_local_element_ptr_range()) {
-        dof_map.dof_indices(elem, dof_indices);
-        dof_map.dof_indices(elem, dof_indices_u, u_var);
-        dof_map.dof_indices(elem, dof_indices_v, v_var);
-
-        const unsigned int n_dofs = dof_indices.size();
-        const unsigned int n_u_dofs = dof_indices_u.size();
-        const unsigned int n_v_dofs = dof_indices_v.size();
-
-        fe->reinit(elem);
-
-        Ke.resize(n_dofs, n_dofs);
-        Fe.resize(n_dofs);
-
-        Kuu.reposition(u_var * n_u_dofs, u_var * n_u_dofs, n_u_dofs, n_u_dofs);
-        Kuv.reposition(u_var * n_u_dofs, v_var * n_u_dofs, n_u_dofs, n_v_dofs);
-
-        Kvu.reposition(v_var * n_v_dofs, u_var * n_v_dofs, n_v_dofs, n_u_dofs);
-        Kvv.reposition(v_var * n_v_dofs, v_var * n_v_dofs, n_v_dofs, n_v_dofs);
-
-        Fu.reposition(u_var * n_u_dofs, n_u_dofs);
-        Fv.reposition(v_var * n_u_dofs, n_v_dofs);
-
-        for (unsigned int qp = 0; qp < qrule.n_points(); qp++) {
-            for (unsigned int i = 0; i < n_u_dofs; i++)
-                for (unsigned int j = 0; j < n_u_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 0, C_k = 0;
-
-                    C_j = 0, C_l = 0;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-
-            for (unsigned int i = 0; i < n_u_dofs; i++)
-                for (unsigned int j = 0; j < n_v_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 0, C_k = 1;
-
-                    C_j = 0, C_l = 0;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-
-            for (unsigned int i = 0; i < n_v_dofs; i++)
-                for (unsigned int j = 0; j < n_u_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 1, C_k = 0;
-
-                    C_j = 0, C_l = 0;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-
-            for (unsigned int i = 0; i < n_v_dofs; i++)
-                for (unsigned int j = 0; j < n_v_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 1, C_k = 1;
-
-                    C_j = 0, C_l = 0;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-        }
-
-        {
-            for (auto side : elem->side_index_range())
-                if (elem->neighbor_ptr(side) == nullptr) {
-                    const std::vector<std::vector<Real>>& phi_face = fe_face->get_phi();
-                    const std::vector<Real>& JxW_face = fe_face->get_JxW();
-
-                    fe_face->reinit(elem, side);
-
-                    if (mesh.get_boundary_info().has_boundary_id(elem, side, 2))  // Apply a traction on the right side
-                    {
-                        for (unsigned int qp = 0; qp < qface.n_points(); qp++)
-                            for (unsigned int i = 0; i < n_v_dofs; i++) Fv(i) += JxW_face[qp] * (-1.) * phi_face[i][qp];
-                        // for (unsigned int i = 0; i < n_u_dofs; i++) Fu(i) += JxW_face[qp] * (-0.1) * phi_face[i][qp];
-                    }
-                }
-        }
-
-        dof_map.constrain_element_matrix_and_vector(Ke, Fe, dof_indices);
-
-        matrix.add_matrix(Ke, dof_indices);
-        system.rhs->add_vector(Fe, dof_indices);
-    }
-}
-
 Real eval_elasticity_tensor(unsigned int i, unsigned int j, unsigned int k, unsigned int l) {
     // Define the Poisson ratio
     const Real nu = 0.3;
@@ -523,7 +354,7 @@ void compute_stresses(EquationSystems& es) {
     const unsigned int dim = mesh.mesh_dimension();
 
     // NonlinearImplicitSystem& system = es.get_system<NonlinearImplicitSystem>("NonlinearElasticity");
-    LinearImplicitSystem& system = es.get_system<LinearImplicitSystem>("Linear Elasticity");
+    ElasticitySystem& system = es.get_system<ElasticitySystem>("Linear Elasticity");
 
     unsigned int displacement_vars[] = {system.variable_number("Ux"), system.variable_number("Uy")};
     const unsigned int u_var = system.variable_number("Ux");

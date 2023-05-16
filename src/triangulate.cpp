@@ -57,6 +57,7 @@ void Triangulate::triangulateSolid(RigidPoly<Scalar, Vector>& poly) {
 
         poly.inner_verts.push_back({x, y});
         poly.inner_world.push_back({x, y});
+        poly.inner_world[i] += poly.center;
     }
 
     // triangles
@@ -68,6 +69,8 @@ void Triangulate::triangulateSolid(RigidPoly<Scalar, Vector>& poly) {
 
         poly.triangles.push_back({v0, v1, v2});
     }
+
+    poly.bound_marks = std::vector<int>(output.pointmarkerlist, output.pointmarkerlist + output.numberofpoints);
 
     poly.triangulated = true;
 }

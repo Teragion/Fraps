@@ -2,28 +2,20 @@
 #include <math.h>
 
 #include <algorithm>
-#include <fstream>
 #include <iostream>
-#include <string>
 
 // libMesh includes
-#include "elasticity_system.h"
 #include "libmesh/boundary_info.h"
 #include "libmesh/dense_matrix.h"
 #include "libmesh/dense_submatrix.h"
 #include "libmesh/dense_subvector.h"
 #include "libmesh/dense_vector.h"
-#include "libmesh/diff_solver.h"
 #include "libmesh/dirichlet_boundaries.h"
 #include "libmesh/dof_map.h"
-#include "libmesh/eigen_sparse_linear_solver.h"
 #include "libmesh/elem.h"
 #include "libmesh/enum_fe_family.h"
 #include "libmesh/enum_solver_package.h"
-#include "libmesh/enum_solver_type.h"
 #include "libmesh/equation_systems.h"
-#include "libmesh/euler2_solver.h"
-#include "libmesh/euler_solver.h"
 #include "libmesh/exodusII_io.h"
 #include "libmesh/fe.h"
 #include "libmesh/getpot.h"
@@ -31,20 +23,13 @@
 #include "libmesh/libmesh.h"
 #include "libmesh/linear_implicit_system.h"
 #include "libmesh/mesh.h"
-#include "libmesh/mesh_function.h"
 #include "libmesh/mesh_generation.h"
-#include "libmesh/newmark_solver.h"
-#include "libmesh/newton_solver.h"
 #include "libmesh/numeric_vector.h"
 #include "libmesh/perf_log.h"
 #include "libmesh/quadrature_gauss.h"
 #include "libmesh/sparse_matrix.h"
-#include "libmesh/steady_solver.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/zero_function.h"
-#include "poly_reader.h"
-#include "rigidpoly.h"
-#include "triangulate.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
@@ -58,78 +43,8 @@ Real eval_elasticity_tensor(unsigned int i, unsigned int j, unsigned int k, unsi
 
 void compute_stresses(EquationSystems& es);
 
-void write_xda(const RigidPoly<Scalar, Vector>& poly) {
-    std::string path = "/Users/teragion/Models/out.xda";
-
-    std::ofstream out;
-    out.open(path, std::ios::out);
-
-    // metadata
-    out << "libMesh-0.7.0+\n";
-    out << poly.triangles.size() << " # Num. Elements\n";
-    out << poly.inner_verts.size() << " # Num. Nodes\n";
-
-    out << "."
-        << "# boundary condition specification file\n";
-    out << "n/a"
-        << "# subdomain id specification file\n";
-    out << "n/a"
-        << "# processor id specification file\n";
-    out << "n/a"
-        << "# p-level specification file\n";
-
-    out << poly.triangles.size() << " # n_elem at level 0, [ type (n0 ... nN-1) ]\n";
-    for (int i = 0; i < poly.triangles.size(); i++) {
-        out << 3 << " " << poly.triangles[i](0) << " " << poly.triangles[i](1) << " " << poly.triangles[i](2) << "\n";
-    }
-
-    for (int i = 0; i < poly.inner_verts.size(); i++) {
-        out << poly.inner_verts[i](0) << " " << poly.inner_verts[i](1) << " " << 0.0 << "\n";
-    }
-
-    int bound_conds = 0;
-    for (int i = 0; i < poly.triangles.size(); i++) {
-        for (int j = 0; j < 3; j++) {
-            int v = poly.triangles[i](j);
-            int w = (poly.triangles[i](j) + 1) % 3;
-            if (poly.inner_verts[v](1) < -0.62 && poly.inner_verts[w](1) < -0.62) {
-                bound_conds += 1;
-            }
-
-            if (dist(poly.inner_world[v], {0.3035, 0.4705}) < 0.05) {
-                if (poly.bound_marks[v] && poly.bound_marks[w]) {
-                    bound_conds += 1;
-                }
-            }
-        }
-    }
-
-    out << bound_conds << " # Num. Boundary Conds.\n";
-    for (int i = 0; i < poly.triangles.size(); i++) {
-        for (int j = 0; j < 3; j++) {
-            int v = poly.triangles[i](j);
-            int w = (poly.triangles[i](j) + 1) % 3;
-            if (poly.inner_verts[v](1) < -0.62 && poly.inner_verts[w](1) < -0.62) {
-                out << i << " " << j << " 40\n";
-            }
-
-            if (dist(poly.inner_world[v], {0.3035, 0.4705}) < 0.05) {
-                if (poly.bound_marks[v] && poly.bound_marks[w]) {
-                    out << i << " " << j << " 30\n";
-                }
-            }
-        }
-    }
-
-    out.close();
-}
-
 // Begin the main program.
 int main(int argc, char** argv) {
-    RigidPoly obj = PolyReader::readSolid("/Users/teragion/Models/out.poly");
-    Triangulate::triangulateSolid(obj);
-    write_xda(obj);
-
     // Initialize libMesh and any dependent libraries
     LibMeshInit init(argc, argv);
 
@@ -150,8 +65,14 @@ int main(int argc, char** argv) {
     // Create a 2D mesh distributed across the default MPI communicator.
     Mesh mesh(init.comm(), dim);
 
-    // 'MeshTool's::Generation::build_square(mesh, nx, ny, 0., 1., 0., 0.2, QUAD9);
-    mesh.read("/Users/teragion/Models/out.xda");
+    // Get the mesh size from the command line.
+    GetPot command_line(argc, argv);
+
+    int nx = 50, ny = 10;
+    if (command_line.search(1, "-nx")) nx = command_line.next(nx);
+    if (command_line.search(1, "-ny")) ny = command_line.next(ny);
+
+    MeshTools::Generation::build_square(mesh, nx, ny, 0., 1., 0., 0.2, QUAD9);
 
     // Print information about the mesh to the screen.
     mesh.print_info();
@@ -161,167 +82,52 @@ int main(int argc, char** argv) {
 
     // Declare the system and its variables.
     // Create a system named "Elasticity"
-    // Declare the system and its variables.
-    // Parse the input file
-    GetPot infile("FEM.in");
+    LinearImplicitSystem& system = equation_systems.add_system<LinearImplicitSystem>("Elasticity");
 
-    // Override input file arguments from the command line
-    infile.parse_command_line(argc, argv);
+    system.attach_assemble_function(assemble_elasticity);
 
-    // Read in parameters from the input file
-    const Real deltat = infile("deltat", 0.25);
-    unsigned int n_timesteps = infile("n_timesteps", 1);
+#ifdef LIBMESH_ENABLE_DIRICHLET
+    // Add two displacement variables, u and v, to the system
+    unsigned int u_var = system.add_variable("u", SECOND, LAGRANGE);
+    unsigned int v_var = system.add_variable("v", SECOND, LAGRANGE);
 
-#ifdef LIBMESH_HAVE_EXODUS_API
-    const unsigned int write_interval = infile("write_interval", 1);
-#endif
+    // Create a ZeroFunction to initialize dirichlet_bc
+    ZeroFunction<> zf;
 
-    ElasticitySystem& system = equation_systems.add_system<ElasticitySystem>("Linear Elasticity");
+    // Construct a Dirichlet boundary condition object
+    // We impose a "clamped" boundary condition on the
+    // "left" boundary, i.e. bc_id = 3
 
-    // Solve this as a time-dependent or steady system
-    std::string time_solver = infile("time_solver", "newmark");
+    // Most DirichletBoundary users will want to supply a "locally
+    // indexed" functor
+    DirichletBoundary dirichlet_bc({3}, {u_var, v_var}, zf, LOCAL_VARIABLE_ORDER);
 
-    ExplicitSystem* v_system;
-    ExplicitSystem* a_system;
+    // We must add the Dirichlet boundary condition _before_
+    // we call equation_systems.init()
+    system.get_dof_map().add_dirichlet_boundary(dirichlet_bc);
+#endif  // LIBMESH_ENABLE_DIRICHLET
 
-    if (time_solver == std::string("newmark")) {
-        // Create ExplicitSystem to help output velocity
-        v_system = &equation_systems.add_system<ExplicitSystem>("Velocity");
-        v_system->add_variable("u_vel", FIRST, LAGRANGE);
-        v_system->add_variable("v_vel", FIRST, LAGRANGE);
-        v_system->add_variable("w_vel", FIRST, LAGRANGE);
-
-        // Create ExplicitSystem to help output acceleration
-        a_system = &equation_systems.add_system<ExplicitSystem>("Acceleration");
-        a_system->add_variable("u_accel", FIRST, LAGRANGE);
-        a_system->add_variable("v_accel", FIRST, LAGRANGE);
-        a_system->add_variable("w_accel", FIRST, LAGRANGE);
-
-        system.time_solver = std::make_unique<NewmarkSolver>(system);
-    }
-
-    else if (time_solver == std::string("euler")) {
-        system.time_solver = std::make_unique<EulerSolver>(system);
-        EulerSolver& euler_solver = cast_ref<EulerSolver&>(*(system.time_solver.get()));
-        euler_solver.theta = infile("theta", 1.0);
-    }
-
-    else if (time_solver == std::string("euler2")) {
-        system.time_solver = std::make_unique<Euler2Solver>(system);
-        Euler2Solver& euler_solver = cast_ref<Euler2Solver&>(*(system.time_solver.get()));
-        euler_solver.theta = infile("theta", 1.0);
-    }
-
-    else if (time_solver == std::string("steady")) {
-        system.time_solver = std::make_unique<SteadySolver>(system);
-        libmesh_assert_equal_to(n_timesteps, 1);
-    } else
-        libmesh_error_msg(std::string("ERROR: invalid time_solver ") + time_solver);
-
+    // calculating stress from solution
     ExplicitSystem& stress_system = equation_systems.add_system<ExplicitSystem>("StressSystem");
-    unsigned int s00 = stress_system.add_variable("sigma_00", CONSTANT, MONOMIAL);
-    unsigned int s01 = stress_system.add_variable("sigma_01", CONSTANT, MONOMIAL);
-    unsigned int s11 = stress_system.add_variable("sigma_11", CONSTANT, MONOMIAL);
+    stress_system.add_variable("sigma_00", CONSTANT, MONOMIAL);
+    stress_system.add_variable("sigma_01", CONSTANT, MONOMIAL);
+    stress_system.add_variable("sigma_11", CONSTANT, MONOMIAL);
 
-    unsigned int e00 = stress_system.add_variable("e_00", CONSTANT, MONOMIAL);
-    unsigned int e01 = stress_system.add_variable("e_01", CONSTANT, MONOMIAL);
-    unsigned int e11 = stress_system.add_variable("e_11", CONSTANT, MONOMIAL);
-
-    // Initialize the system
+    // Initialize the data structures for the equation system.
     equation_systems.init();
-
-    // Set the time stepping options
-    system.deltat = deltat;
-
-    // And the nonlinear solver options
-    DiffSolver& solver = *(system.time_solver->diff_solver().get());
-    solver.quiet = infile("solver_quiet", true);
-    solver.verbose = !solver.quiet;
-    solver.max_nonlinear_iterations = infile("max_nonlinear_iterations", 15);
-    solver.relative_step_tolerance = infile("relative_step_tolerance", 1.e-3);
-    solver.relative_residual_tolerance = infile("relative_residual_tolerance", 0.0);
-    solver.absolute_residual_tolerance = infile("absolute_residual_tolerance", 0.0);
-
-    // And the linear solver options
-    solver.max_linear_iterations = infile("max_linear_iterations", 50000);
-    solver.initial_linear_tolerance = infile("initial_linear_tolerance", 1.e-3);
 
     // Print information about the system to the screen.
     equation_systems.print_info();
 
-    // If we're using EulerSolver or Euler2Solver, and we're using EigenSparseLinearSolver,
-    // then we need to reset the EigenSparseLinearSolver to use SPARSELU because BICGSTAB
-    // chokes on the Jacobian matrix we give it and Eigen's GMRES currently doesn't work.
-    NewtonSolver* newton_solver = dynamic_cast<NewtonSolver*>(&solver);
-    if (newton_solver && (time_solver == std::string("euler") || time_solver == std::string("euler2"))) {
-#ifdef LIBMESH_HAVE_EIGEN_SPARSE
-        LinearSolver<Number>& linear_solver = newton_solver->get_linear_solver();
-        EigenSparseLinearSolver<Number>* eigen_linear_solver = dynamic_cast<EigenSparseLinearSolver<Number>*>(&linear_solver);
+    // Solve the system
+    system.solve();
 
-        if (eigen_linear_solver) eigen_linear_solver->set_solver_type(SPARSELU);
-#endif
-    }
+    compute_stresses(equation_systems);
 
-    if (time_solver == std::string("newmark")) {
-        NewmarkSolver* newmark = cast_ptr<NewmarkSolver*>(system.time_solver.get());
-        newmark->compute_initial_accel();
-
-        // Copy over initial velocity and acceleration for output.
-        // Note we can do this because of the matching variables/FE spaces
-        *(v_system->solution) = system.get_vector("_old_solution_rate");
-        *(a_system->solution) = system.get_vector("_old_solution_accel");
-    }
-
+    // Plot the solution
 #ifdef LIBMESH_HAVE_EXODUS_API
-    // Output initial state
-    {
-        std::ostringstream file_name;
-
-        // We write the file in the ExodusII format.
-        file_name << std::string("out.") + time_solver + std::string(".e-s.") << std::setw(3) << std::setfill('0') << std::right << 0;
-        compute_stresses(equation_systems);
-
-        ExodusII_IO(mesh).write_timestep(file_name.str(), equation_systems,
-                                         1,  // This number indicates how many time steps
-                                             // are being written to the file
-                                         system.time);
-    }
+    ExodusII_IO(mesh).write_equation_systems("displacement.e", equation_systems);
 #endif  // #ifdef LIBMESH_HAVE_EXODUS_API
-
-    // Now we begin the timestep loop to compute the time-accurate
-    // solution of the equations.
-    for (unsigned int t_step = 0; t_step != n_timesteps; ++t_step) {
-        // A pretty update message
-        libMesh::out << "\n\nSolving time step " << t_step << ", time = " << system.time << std::endl;
-
-        system.solve();
-        compute_stresses(equation_systems);
-
-        // Advance to the next timestep in a transient problem
-        system.time_solver->advance_timestep();
-
-        // Copy over updated velocity and acceleration for output.
-        // Note we can do this because of the matching variables/FE spaces
-        if (time_solver == std::string("newmark")) {
-            *(v_system->solution) = system.get_vector("_old_solution_rate");
-            *(a_system->solution) = system.get_vector("_old_solution_accel");
-        }
-
-#ifdef LIBMESH_HAVE_EXODUS_API
-        // Write out this timestep if we're requested to
-        if ((t_step + 1) % write_interval == 0) {
-            std::ostringstream file_name;
-
-            // We write the file in the ExodusII format.
-            file_name << std::string("out.") + time_solver + std::string(".e-s.") << std::setw(3) << std::setfill('0') << std::right << t_step + 1;
-
-            ExodusII_IO(mesh).write_timestep(file_name.str(), equation_systems,
-                                             1,  // This number indicates how many time steps
-                                                 // are being written to the file
-                                             system.time);
-        }
-#endif  // #ifdef LIBMESH_HAVE_EXODUS_API
-    }
 
     // All done.
     return 0;
@@ -474,11 +280,10 @@ void assemble_elasticity(EquationSystems& es, const std::string& libmesh_dbg_var
 
                     fe_face->reinit(elem, side);
 
-                    if (mesh.get_boundary_info().has_boundary_id(elem, side, 2))  // Apply a traction on the right side
+                    if (mesh.get_boundary_info().has_boundary_id(elem, side, 1))  // Apply a traction on the right side
                     {
                         for (unsigned int qp = 0; qp < qface.n_points(); qp++)
                             for (unsigned int i = 0; i < n_v_dofs; i++) Fv(i) += JxW_face[qp] * (-1.) * phi_face[i][qp];
-                        // for (unsigned int i = 0; i < n_u_dofs; i++) Fu(i) += JxW_face[qp] * (-0.1) * phi_face[i][qp];
                     }
                 }
         }
@@ -494,12 +299,11 @@ Real eval_elasticity_tensor(unsigned int i, unsigned int j, unsigned int k, unsi
     // Define the Poisson ratio
     const Real nu = 0.3;
 
-    // Define Young's modulus
-    const Real K = 800.0;
+    // Using Young's modulus = 1.0
 
     // Define the Lame constants (lambda_1 and lambda_2) based on Poisson ratio
-    const Real lambda_1 = K * nu / ((1. + nu) * (1. - 2. * nu));
-    const Real lambda_2 = 0.5 * K / (1 + nu);
+    const Real lambda_1 = nu / ((1. + nu) * (1. - 2. * nu));
+    const Real lambda_2 = 0.5 / (1 + nu);
 
     // Define the Kronecker delta functions that we need here
     Real delta_ij = (i == j) ? 1. : 0.;
@@ -523,10 +327,10 @@ void compute_stresses(EquationSystems& es) {
     const unsigned int dim = mesh.mesh_dimension();
 
     // NonlinearImplicitSystem& system = es.get_system<NonlinearImplicitSystem>("NonlinearElasticity");
-    LinearImplicitSystem& system = es.get_system<LinearImplicitSystem>("Linear Elasticity");
+    LinearImplicitSystem& system = es.get_system<LinearImplicitSystem>("Elasticity");
 
-    unsigned int displacement_vars[] = {system.variable_number("Ux"), system.variable_number("Uy")};
-    const unsigned int u_var = system.variable_number("Ux");
+    unsigned int displacement_vars[] = {system.variable_number("u"), system.variable_number("v")};
+    const unsigned int u_var = system.variable_number("u");
 
     const DofMap& dof_map = system.get_dof_map();
     FEType fe_type = dof_map.variable_type(u_var);
@@ -540,17 +344,15 @@ void compute_stresses(EquationSystems& es) {
     // Also, get a reference to the ExplicitSystem
     ExplicitSystem& stress_system = es.get_system<ExplicitSystem>("StressSystem");
     const DofMap& stress_dof_map = stress_system.get_dof_map();
-    unsigned int sigma_vars[] = {stress_system.variable_number("sigma_00"), stress_system.variable_number("sigma_01"), stress_system.variable_number("sigma_11")};
+    unsigned int sigma_vars[] = {stress_system.variable_number("sigma_00"), stress_system.variable_number("sigma_01"), 
+                                 stress_system.variable_number("sigma_11")};
 
-    unsigned int strain_vars[] = {stress_system.variable_number("e_00"), stress_system.variable_number("e_01"), stress_system.variable_number("e_11")};
     // Storage for the stress dof indices on each element
     std::vector<std::vector<dof_id_type>> dof_indices_var(system.n_vars());
     std::vector<dof_id_type> stress_dof_indices_var;
-    std::vector<dof_id_type> strain_dof_indices_var;
 
     // To store the stress tensor on each element
     TensorValue<Number> elem_avg_stress_tensor;
-    TensorValue<Number> elem_avg_strain_tensor;
 
     for (const auto& elem : mesh.active_local_element_ptr_range()) {
         for (unsigned int var = 0; var < 2; var++) dof_map.dof_indices(elem, dof_indices_var[var], displacement_vars[var]);
@@ -561,7 +363,6 @@ void compute_stresses(EquationSystems& es) {
 
         // clear the stress tensor
         elem_avg_stress_tensor.zero();
-        elem_avg_strain_tensor.zero();
 
         // printf("%lf\n", system.current_solution(dof_indices_var[0][0]));
 
@@ -577,14 +378,7 @@ void compute_stresses(EquationSystems& es) {
                 for (unsigned int j = 0; j < 2; j++) {
                     strain_tensor(i, j) += 0.5 * (grad_u(i, j) + grad_u(j, i));
 
-                    // effect of second order terms?
-                    // for (unsigned int k = 0; k < 2; k++) {
-                    //     strain_tensor(i, j) += 0.5 * grad_u(k, i) * grad_u(k, j);
-                    //     if (grad_u(k, i) * grad_u(k, j) > 0.5) {
-                    //         std::cout << "Alert!\n";
-                    //     }
-                    //     std::cout << grad_u(k, i) * grad_u(k, j) << " " << (grad_u(i, j) + grad_u(j, i)) << std::endl;
-                    // }
+                    for (unsigned int k = 0; k < 2; k++) strain_tensor(i, j) += 0.5 * grad_u(k, i) * grad_u(k, j);
                 }
 
             // Define the deformation gradient
@@ -607,18 +401,16 @@ void compute_stresses(EquationSystems& es) {
             // We want to plot the average Cauchy stress on each element, hence
             // we integrate stress_tensor
             elem_avg_stress_tensor.add_scaled(stress_tensor, JxW[qp]);
-            elem_avg_strain_tensor.add_scaled(strain_tensor, JxW[qp]);
         }
 
         // Get the average stress per element by dividing by volume
         elem_avg_stress_tensor /= elem->volume();
 
         // load elem_sigma data into stress_system
-        unsigned int var_index = 0;
+        unsigned int stress_var_index = 0;
         for (unsigned int i = 0; i < 2; i++)
             for (unsigned int j = i; j < 2; j++) {
-                stress_dof_map.dof_indices(elem, stress_dof_indices_var, sigma_vars[var_index]);
-                stress_dof_map.dof_indices(elem, strain_dof_indices_var, strain_vars[var_index]);
+                stress_dof_map.dof_indices(elem, stress_dof_indices_var, sigma_vars[stress_var_index]);
 
                 // We are using CONSTANT MONOMIAL basis functions, hence we only need to get
                 // one dof index per variable
@@ -628,13 +420,7 @@ void compute_stresses(EquationSystems& es) {
                     stress_system.solution->set(dof_index, elem_avg_stress_tensor(i, j));
                 }
 
-                dof_index = strain_dof_indices_var[0];
-
-                if ((stress_system.solution->first_local_index() <= dof_index) && (dof_index < stress_system.solution->last_local_index())) {
-                    stress_system.solution->set(dof_index, elem_avg_strain_tensor(i, j));
-                }
-
-                var_index++;
+                stress_var_index++;
             }
     }
 

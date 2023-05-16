@@ -866,7 +866,7 @@ int main() {
             for (int i = 0; i < objs[0].sections.size(); i++) {
                 Color color;
                 color_map.getColorAtValue(static_cast<float>(objs[0].sections[i].ratio) / max_r, color);
-                // mon.drawLine(objs[0].center + objs[0].sections[i].j0.p, objs[0].center + objs[0].sections[i].j1.p, 1, color);
+                mon.drawLine(objs[0].center + objs[0].sections[i].j0.p, objs[0].center + objs[0].sections[i].j1.p, 1, color);
             }
 
             // write to png

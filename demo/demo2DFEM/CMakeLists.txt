@@ -12,10 +12,13 @@ add_executable(FEM2DDemo
     ${GLAD_SRCS}
     ${FRAPS_SRCS}
     ${FRAPS_HDRS}
+    elasticity_system.h
+    elasticity_system.cpp
     demo2DFEM.cpp
 )
 
 target_include_directories(FEM2DDemo
+    PUBLIC .
     PUBLIC ${LIBMESH_INCLUDE_DIR}
 )
 
