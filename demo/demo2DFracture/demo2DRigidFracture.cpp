@@ -694,6 +694,8 @@ int main() {
     // objs[0].convex_decompose();
     Triangulate::triangulateSolid(objs[0]);
     objs[0].stress_toleration = 10;
+    objs[0].fixed_about_point = true;
+    objs[0].fix_point = 0;
 
 //    for (int i = 0; i < 6; i++) {
 //        objs.push_back(RigidPoly<Scalar, Vector>({{i - 7.5, 0.0}, {i - 7.5, 4.0}, {i - 8.0, 4.0}, {i - 8.0, 0.0}}, 4.0));
@@ -701,9 +703,9 @@ int main() {
 //        objs[i].stress_toleration = 18000;
 //    }
 
-    objs.push_back(RigidPoly<Scalar, Vector>({{4.5, 0.6}, {4.5, 0.8}, {4.2, 0.7}}, 2.0));
+    objs.push_back(RigidPoly<Scalar, Vector>({{0.48, 1.6}, {0.48, 1.8}, {0.29, 1.8}, {0.29, 1.6}}, 2.0));
     objs[1].enable_fracture = false;
-    objs[1].m = {-5, 0};
+    objs[1].m = {0, -3};
 
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-8.5, 4.0}, {-2.0, 4.0}, {-5.25, 4.5}}, 1.0));
 //    objs[7].enable_fracture = false;
@@ -719,7 +721,7 @@ int main() {
 //    objs.push_back(RigidPoly<Scalar, Vector>({{-10.5, 0.0}, {-10.5, -0.5}, {10.5, -0.5}, {10.5, 0.0}}, 1.0));
 //    objs[8].set_fixed();
 
-//    objs.push_back(RigidPoly<Scalar, Vector>({{-7.5, 0.3}, {-7.5, 0.0}, {-6.5, 0.0}, {-6.5, 0.3}}, 1.0));
+//    objs.push_back(RigidPoly<Scalar, Vector>({{-2.5, -0.64}, {-2.5, -2}, {2.5, -2}, {2.5, -0.64}}, 1.0));
 //    objs[2].set_fixed();
 
     // objs.push_back(RigidPoly<Scalar, Vector>({{-10, -5.0}, {-9.5, -5.0}, {-9.5, 11.0}, {-10, 11.0}}, 1.0));
@@ -836,8 +838,7 @@ int main() {
             // drawing procedure
             mon.clear();
 
-            for (int i = 0; i < objs.size(); i++) {
-                auto& c = objs[i];
+            for (int i = 0; i < 2; i++) {
                 Color color;
                 color_map.getColorAtValue(static_cast<float>(i) / static_cast<float>(objs.size()), color);
                 if (objs[i].triangulated) {
@@ -866,8 +867,19 @@ int main() {
             for (int i = 0; i < objs[0].sections.size(); i++) {
                 Color color;
                 color_map.getColorAtValue(static_cast<float>(objs[0].sections[i].ratio) / max_r, color);
+                if (objs[0].sections[i].ratio > 0)
                 mon.drawLine(objs[0].center + objs[0].sections[i].j0.p, objs[0].center + objs[0].sections[i].j1.p, 1, color);
             }
+
+            // for (int i = 0; i < 1000; i++) {
+            //     Color color;
+            //     Scalar p = static_cast<double>(i + 0.5) / 999.0 - 0.5;
+            //     color_map.getColorAtValue(static_cast<double>(i) / 1000, color);
+            //     mon.drawLine(Vec2d{p, 0.1}, Vec2d{p, -0.1}, 1, color);
+            //     p = static_cast<double>(i + 0.2) / 999.0 - 0.5;
+            //     color_map.getColorAtValue(static_cast<double>(i) / 1000, color);
+            //     mon.drawLine(Vec2d{p, 0.1}, Vec2d{p, -0.1}, 1, color);
+            // }
 
             // write to png
 //            glReadPixels(0, 0, 1024, 1024, GL_RGB, GL_UNSIGNED_BYTE, (GLvoid *) pixels);

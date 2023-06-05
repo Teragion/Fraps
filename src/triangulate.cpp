@@ -46,7 +46,7 @@ void Triangulate::triangulateSolid(RigidPoly<Scalar, Vector>& poly) {
     output.edgemarkerlist = NULL;
     output.normlist = NULL;
 
-    char option[] = "pzqa0.05";
+    char option[] = "pzqa1";
 
     triangulate(option, &input, &output, NULL);
 
@@ -73,4 +73,13 @@ void Triangulate::triangulateSolid(RigidPoly<Scalar, Vector>& poly) {
     poly.bound_marks = std::vector<int>(output.pointmarkerlist, output.pointmarkerlist + output.numberofpoints);
 
     poly.triangulated = true;
+
+    for (int i = 0; i < poly.triangles.size(); i++) {
+        for (int v = 0; v < 3; v++) {
+            poly.convex_polys.push_back({poly.inner_verts[poly.triangles[i](0)], poly.inner_verts[poly.triangles[i](1)], poly.inner_verts[poly.triangles[i](2)]});
+            poly.convex_polys_world.push_back({poly.inner_world[poly.triangles[i](0)], poly.inner_world[poly.triangles[i](1)], poly.inner_world[poly.triangles[i](2)]});
+        }
+    }
+
+    poly.decomposed = true;
 }

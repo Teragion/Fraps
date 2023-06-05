@@ -33,8 +33,10 @@
 #include "libmesh/sparse_matrix.h"
 #include "libmesh/string_to_enum.h"
 #include "libmesh/zero_function.h"
+
 #include "poly_reader.h"
 #include "rigidpoly.h"
+#include "stress.h"
 #include "triangulate.h"
 
 // Bring in everything from the libMesh namespace
@@ -119,6 +121,9 @@ void write_xda(const RigidPoly<Scalar, Vector>& poly) {
 int main(int argc, char** argv) {
     RigidPoly obj = PolyReader::readSolid("/Users/teragion/Models/out.poly");
     Triangulate::triangulateSolid(obj);
+    obj.stress_toleration = 1.0;
+    obj.enable_fracture = true;
+    obj.init_sections();
     write_xda(obj);
 
     // Initialize libMesh and any dependent libraries
@@ -196,6 +201,7 @@ int main(int argc, char** argv) {
     unsigned int e11 = stress_system.add_variable("e_11", CONSTANT, MONOMIAL);
 
     // Initialize the data structures for the equation system.
+    equation_systems.parameters.set<unsigned int>("linear solver maximum iterations") = 100000;
     equation_systems.init();
 
     // Print information about the system to the screen.
@@ -212,12 +218,23 @@ int main(int argc, char** argv) {
 #endif  // #ifdef LIBMESH_HAVE_EXODUS_API
 
     // Evaluation at specific points
-    MeshFunction stress_func(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s00);
-    stress_func.init();
+    MeshFunction sigma00(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s00);
+    MeshFunction sigma01(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s01);
+    MeshFunction sigma11(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s11);
+    sigma00.init();
+    sigma01.init();
+    sigma11.init();
     // DenseVector<Number> out(1000);
 
     // stress_func(Point(-0.00605, -0.0413666, 0), 0.0, out);
-    std::cout << stress_func(Point(-0.00605, -0.0413666, 0)) << std::endl;
+    // for (int i = 0; i < obj.sections.size(); i++) {
+    //     std::cout << max_segment_stress(sigma00, sigma01, sigma11, obj.sections[i]) << std::endl;
+    // }
+    // const unsigned int maxits = equation_systems.parameters.get<unsigned int>("linear solver maximum iterations");
+    // std::cout << maxits << std::endl;
+
+    calculate_sections_stress(sigma00, sigma01, sigma11, obj);
+    visualize_stress(obj);
 
     return 0;
 }
@@ -372,8 +389,8 @@ void assemble_elasticity(EquationSystems& es, const std::string& libmesh_dbg_var
                     if (mesh.get_boundary_info().has_boundary_id(elem, side, 2))  // Apply a traction on the right side
                     {
                         for (unsigned int qp = 0; qp < qface.n_points(); qp++)
-                        for (unsigned int i = 0; i < n_v_dofs; i++) Fv(i) += JxW_face[qp] * (-1.) * phi_face[i][qp];
-                        // for (unsigned int i = 0; i < n_u_dofs; i++) Fu(i) += JxW_face[qp] * (-0.1) * phi_face[i][qp];
+                        // for (unsigned int i = 0; i < n_v_dofs; i++) Fv(i) += JxW_face[qp] * (-1.) * phi_face[i][qp];
+                        for (unsigned int i = 0; i < n_v_dofs; i++) Fv(i) += JxW_face[qp] * (-0.1) * phi_face[i][qp];
                     }
                 }
         }

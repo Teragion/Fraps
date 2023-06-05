@@ -259,7 +259,7 @@ bool ElasticitySystem::side_time_derivative(bool request_jacobian, DiffContext& 
 
         unsigned int n_qpoints = c.get_side_qrule().n_points();
 
-        Real pressure = 100;
+        Real pressure = 5;
         Gradient traction;
         traction(_dim - 1) = -1;
 

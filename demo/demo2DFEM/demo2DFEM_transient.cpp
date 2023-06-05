@@ -44,13 +44,11 @@
 #include "libmesh/zero_function.h"
 #include "poly_reader.h"
 #include "rigidpoly.h"
+#include "stress.h"
 #include "triangulate.h"
 
 // Bring in everything from the libMesh namespace
 using namespace libMesh;
-
-// Matrix and right-hand side assemble
-void assemble_elasticity(EquationSystems& es, const std::string& system_name);
 
 // Define the elasticity tensor, which is a fourth-order tensor
 // i.e. it has four indices i, j, k, l
@@ -110,7 +108,7 @@ void write_xda(const RigidPoly<Scalar, Vector>& poly) {
             int v = poly.triangles[i](j);
             int w = (poly.triangles[i](j) + 1) % 3;
             if (poly.inner_verts[v](1) < -0.62 && poly.inner_verts[w](1) < -0.62) {
-                out << i << " " << j << " 40\n";
+                out << i << " " << j << " 50\n";
             }
 
             if (dist(poly.inner_world[v], {0.3035, 0.4705}) < 0.05) {
@@ -128,6 +126,9 @@ void write_xda(const RigidPoly<Scalar, Vector>& poly) {
 int main(int argc, char** argv) {
     RigidPoly obj = PolyReader::readSolid("/Users/teragion/Models/out.poly");
     Triangulate::triangulateSolid(obj);
+    obj.stress_toleration = 1.0;
+    obj.enable_fracture = true;
+    obj.init_sections();
     write_xda(obj);
 
     // Initialize libMesh and any dependent libraries
@@ -320,174 +321,20 @@ int main(int argc, char** argv) {
                                                  // are being written to the file
                                              system.time);
         }
+        MeshFunction sigma00(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s00);
+        MeshFunction sigma01(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s01);
+        MeshFunction sigma11(stress_system.get_equation_systems(), *stress_system.current_local_solution, stress_system.get_dof_map(), s11);
+        sigma00.init();
+        sigma01.init();
+        sigma11.init();
+
+        calculate_sections_stress(sigma00, sigma01, sigma11, obj);
 #endif  // #ifdef LIBMESH_HAVE_EXODUS_API
     }
+    visualize_stress(obj);
 
     // All done.
     return 0;
-}
-
-void assemble_elasticity(EquationSystems& es, const std::string& libmesh_dbg_var(system_name)) {
-    libmesh_assert_equal_to(system_name, "Elasticity");
-
-    const MeshBase& mesh = es.get_mesh();
-
-    const unsigned int dim = mesh.mesh_dimension();
-
-    LinearImplicitSystem& system = es.get_system<LinearImplicitSystem>("Elasticity");
-
-    const unsigned int u_var = system.variable_number("u");
-    const unsigned int v_var = system.variable_number("v");
-
-    const DofMap& dof_map = system.get_dof_map();
-    FEType fe_type = dof_map.variable_type(0);
-    std::unique_ptr<FEBase> fe(FEBase::build(dim, fe_type));
-    QGauss qrule(dim, fe_type.default_quadrature_order());
-    fe->attach_quadrature_rule(&qrule);
-
-    std::unique_ptr<FEBase> fe_face(FEBase::build(dim, fe_type));
-    QGauss qface(dim - 1, fe_type.default_quadrature_order());
-    fe_face->attach_quadrature_rule(&qface);
-
-    const std::vector<Real>& JxW = fe->get_JxW();
-    const std::vector<std::vector<RealGradient>>& dphi = fe->get_dphi();
-
-    DenseMatrix<Number> Ke;
-    DenseVector<Number> Fe;
-
-    DenseSubMatrix<Number> Kuu(Ke), Kuv(Ke), Kvu(Ke), Kvv(Ke);
-
-    DenseSubVector<Number> Fu(Fe), Fv(Fe);
-
-    std::vector<dof_id_type> dof_indices;
-    std::vector<dof_id_type> dof_indices_u;
-    std::vector<dof_id_type> dof_indices_v;
-
-    SparseMatrix<Number>& matrix = system.get_system_matrix();
-
-    for (const auto& elem : mesh.active_local_element_ptr_range()) {
-        dof_map.dof_indices(elem, dof_indices);
-        dof_map.dof_indices(elem, dof_indices_u, u_var);
-        dof_map.dof_indices(elem, dof_indices_v, v_var);
-
-        const unsigned int n_dofs = dof_indices.size();
-        const unsigned int n_u_dofs = dof_indices_u.size();
-        const unsigned int n_v_dofs = dof_indices_v.size();
-
-        fe->reinit(elem);
-
-        Ke.resize(n_dofs, n_dofs);
-        Fe.resize(n_dofs);
-
-        Kuu.reposition(u_var * n_u_dofs, u_var * n_u_dofs, n_u_dofs, n_u_dofs);
-        Kuv.reposition(u_var * n_u_dofs, v_var * n_u_dofs, n_u_dofs, n_v_dofs);
-
-        Kvu.reposition(v_var * n_v_dofs, u_var * n_v_dofs, n_v_dofs, n_u_dofs);
-        Kvv.reposition(v_var * n_v_dofs, v_var * n_v_dofs, n_v_dofs, n_v_dofs);
-
-        Fu.reposition(u_var * n_u_dofs, n_u_dofs);
-        Fv.reposition(v_var * n_u_dofs, n_v_dofs);
-
-        for (unsigned int qp = 0; qp < qrule.n_points(); qp++) {
-            for (unsigned int i = 0; i < n_u_dofs; i++)
-                for (unsigned int j = 0; j < n_u_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 0, C_k = 0;
-
-                    C_j = 0, C_l = 0;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kuu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-
-            for (unsigned int i = 0; i < n_u_dofs; i++)
-                for (unsigned int j = 0; j < n_v_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 0, C_k = 1;
-
-                    C_j = 0, C_l = 0;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kuv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-
-            for (unsigned int i = 0; i < n_v_dofs; i++)
-                for (unsigned int j = 0; j < n_u_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 1, C_k = 0;
-
-                    C_j = 0, C_l = 0;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kvu(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-
-            for (unsigned int i = 0; i < n_v_dofs; i++)
-                for (unsigned int j = 0; j < n_v_dofs; j++) {
-                    // Tensor indices
-                    unsigned int C_i, C_j, C_k, C_l;
-                    C_i = 1, C_k = 1;
-
-                    C_j = 0, C_l = 0;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 0;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 0, C_l = 1;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-
-                    C_j = 1, C_l = 1;
-                    Kvv(i, j) += JxW[qp] * (eval_elasticity_tensor(C_i, C_j, C_k, C_l) * dphi[i][qp](C_j) * dphi[j][qp](C_l));
-                }
-        }
-
-        {
-            for (auto side : elem->side_index_range())
-                if (elem->neighbor_ptr(side) == nullptr) {
-                    const std::vector<std::vector<Real>>& phi_face = fe_face->get_phi();
-                    const std::vector<Real>& JxW_face = fe_face->get_JxW();
-
-                    fe_face->reinit(elem, side);
-
-                    if (mesh.get_boundary_info().has_boundary_id(elem, side, 2))  // Apply a traction on the right side
-                    {
-                        for (unsigned int qp = 0; qp < qface.n_points(); qp++)
-                            for (unsigned int i = 0; i < n_v_dofs; i++) Fv(i) += JxW_face[qp] * (-1.) * phi_face[i][qp];
-                        // for (unsigned int i = 0; i < n_u_dofs; i++) Fu(i) += JxW_face[qp] * (-0.1) * phi_face[i][qp];
-                    }
-                }
-        }
-
-        dof_map.constrain_element_matrix_and_vector(Ke, Fe, dof_indices);
-
-        matrix.add_matrix(Ke, dof_indices);
-        system.rhs->add_vector(Fe, dof_indices);
-    }
 }
 
 Real eval_elasticity_tensor(unsigned int i, unsigned int j, unsigned int k, unsigned int l) {
@@ -495,7 +342,7 @@ Real eval_elasticity_tensor(unsigned int i, unsigned int j, unsigned int k, unsi
     const Real nu = 0.3;
 
     // Define Young's modulus
-    const Real K = 800.0;
+    const Real K = 100.0;
 
     // Define the Lame constants (lambda_1 and lambda_2) based on Poisson ratio
     const Real lambda_1 = K * nu / ((1. + nu) * (1. - 2. * nu));
@@ -523,7 +370,7 @@ void compute_stresses(EquationSystems& es) {
     const unsigned int dim = mesh.mesh_dimension();
 
     // NonlinearImplicitSystem& system = es.get_system<NonlinearImplicitSystem>("NonlinearElasticity");
-    LinearImplicitSystem& system = es.get_system<LinearImplicitSystem>("Linear Elasticity");
+    ElasticitySystem& system = es.get_system<ElasticitySystem>("Linear Elasticity");
 
     unsigned int displacement_vars[] = {system.variable_number("Ux"), system.variable_number("Uy")};
     const unsigned int u_var = system.variable_number("Ux");
@@ -595,13 +442,18 @@ void compute_stresses(EquationSystems& es) {
             for (unsigned int i = 0; i < 2; i++)
                 for (unsigned int j = 0; j < 2; j++)
                     for (unsigned int k = 0; k < 2; k++)
-                        for (unsigned int l = 0; l < 2; l++) stress_tensor(i, j) += eval_elasticity_tensor(i, j, k, l) * strain_tensor(k, l);
+                        for (unsigned int l = 0; l < 2; l++) {
+                            stress_tensor(i, j) += eval_elasticity_tensor(i, j, k, l) * strain_tensor(k, l);
+                            // std::cout << i << " " << j << " " << k << " " << l << " " << eval_elasticity_tensor(i, j, k, l) << std::endl;
+                        }
+            // std::cout << strain_tensor << std::endl;
+            // std::cout << stress_tensor << std::endl;
 
             // stress_tensor now holds the second Piola-Kirchoff stress (PK2) at point qp.
             // However, in this example we want to compute the Cauchy stress which is given by
             // 1/det(F) * F * PK2 * F^T, hence we now apply this transformation.
             auto Fdet = F(0, 0) * F(1, 1) - F(0, 1) * F(1, 0);
-            stress_tensor = 1. / Fdet * F * stress_tensor * F.transpose();
+            stress_tensor = 1. / Fdet * F * stress_tensor * (F.transpose());
             // stress_tensor = 1. / F.det() * F * stress_tensor * F.transpose();
 
             // We want to plot the average Cauchy stress on each element, hence

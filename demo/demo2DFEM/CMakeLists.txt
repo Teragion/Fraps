@@ -14,7 +14,8 @@ add_executable(FEM2DDemo
     ${FRAPS_HDRS}
     elasticity_system.h
     elasticity_system.cpp
-    demo2DFEM.cpp
+    demo2DFEM_transient.cpp
+    # demo2DFEM_static.cpp
 )
 
 target_include_directories(FEM2DDemo
@@ -40,3 +41,5 @@ target_link_libraries(FEM2DDemo
     triangle
     MPI::MPI_CXX
 )
+
+file(COPY FEM.in DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)

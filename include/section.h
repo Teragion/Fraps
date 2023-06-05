@@ -51,7 +51,9 @@ struct Section {
     Scalar w1;
     Scalar w1_inv{};
 
-    Scalar ratio;
+    Scalar ratio = 0.0;
+
+    int fixed_side = -1;
 };
 
 /**

@@ -85,6 +85,9 @@ struct RigidPoly {
     bool enable_fracture = true;
     bool deleted = false;
 
+    bool fixed_about_point = false;
+    int fix_point = -1;
+
     RigidPoly() 
         : verts(), center({0.0, 0.0}), rot(0.0), m(0.0), L(0.0), density(1.0), fixed(false) {}
     
@@ -517,6 +520,10 @@ void RigidPoly<Scalar, Vector>::calculate_section_mass_mmoi(Section& section){
     int cur_side = 0;
 
     for (int i = 0; i < verts.size(); i++) {
+        if (i == fixed_about_point) {
+            section.fixed_side = cur_side;
+        }
+        
         if (cur_side == 0) {
             s0.verts.push_back(verts[i]);
         } else {
@@ -732,20 +739,44 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
                 j1 += i.J;
             }
             j += i.J;
+
+            if (impulse_side != sections[idx].fixed_side) {
+                std::cout << "i.pos: " << i.pos(0) << " " << i.pos(1) << std::endl;
+                std::cout << "i.J: " << i.J(0) << " " << i.J(1) << std::endl;
+                std::cout << "p: " << sections[idx].p(0) << " " << sections[idx].p(1) << std::endl;
+                std::cout << "side_torque: " << side_torque << std::endl;
+            }
         }
-        // adjust for shear force
-        t0 += cross(p - c0, j * (s.w0 / w) - j0);
-        t1 += cross(p - c1, j * (s.w1 / w) - j1);
 
-        Scalar transfer0 = std::abs(domega * s.I0 - t0);
-        Scalar transfer1 = std::abs(domega * s.I1 - t1);
-        Scalar transfer = std::max(transfer0, transfer1);
-        // cancelling
-        Scalar stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
-        // 2nd-mmoi / r_max = section_modulus
+        if (!fixed_about_point) {
+            // adjust for shear force
+            t0 += cross(p - c0, j * (s.w0 / w) - j0);
+            t1 += cross(p - c1, j * (s.w1 / w) - j1);
+        }
 
-        Scalar tangential_impulse = dot(j * (s.w0 / w) - j0, s.normal);
-        stress = stress - tangential_impulse / fracture_dt;
+        Scalar stress;
+        if (!fixed_about_point) { // floating without constraint
+            Scalar transfer0 = std::abs(domega * s.I0 - t0);
+            Scalar transfer1 = std::abs(domega * s.I1 - t1);
+            Scalar transfer = std::max(transfer0, transfer1);
+            // cancelling
+            stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
+            // 2nd-mmoi / r_max = section_modulus
+
+            Scalar tangential_impulse = dot(j * (s.w0 / w) - j0, s.normal);
+            stress = stress - tangential_impulse / fracture_dt;
+        } else {
+            if (s.fixed_side == 0) {
+                Scalar transfer = std::abs(t1);
+                stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
+            } else if (s.fixed_side == 1) {
+                Scalar transfer = std::abs(t0);
+                stress = (transfer * (s.length / 2) / moment_of_inertia(s.length)) / fracture_dt;
+            } else {
+                assert(false);
+                stress = -1;
+            }
+        }
 
 #ifndef NDEBUG
         std::cout << "id: " << idx << std::endl;
@@ -763,7 +794,6 @@ bool RigidPoly<Scalar, Vector>::check_fracture() {
         std::cout << "j: " << j << std::endl;
         std::cout << "shear0: " << cross(p - c0, j * (s.w0 / w) - j0) << std::endl;
         std::cout << "shear1: " << cross(p - c1, j * (s.w1 / w) - j1) << std::endl;
-        std::cout << "tangential: " << tangential_impulse / fracture_dt << std::endl;
         std::cout << "s.normal: " << s.normal << std::endl;
 #endif
 
